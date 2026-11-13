@@ -36,6 +36,8 @@ export type Game = {
   minutes: number;
   accent: string;
   description: string;
+  /** Optional poster image URL (e.g. "/posters/carrom.webp"). Falls back to a generated poster. */
+  poster?: string;
 } & (
   | { kind: "builtin"; engine: GameEngine }
   | { kind: "iframe"; embedUrl: string }

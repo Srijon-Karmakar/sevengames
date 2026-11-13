@@ -25,7 +25,8 @@ function Shell() {
   return (
     <div className="app">
       <Nav user={auth.user} onSignOut={handleSignOut} />
-      <RouterRoutes>
+      <main className="route" key={location.pathname}>
+      <RouterRoutes location={location}>
         <Route path="/" element={<Home />} />
         <Route path="/game/:id" element={<GamePage />} />
         <Route path="/login" element={<Login />} />
@@ -33,6 +34,7 @@ function Shell() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="*" element={<Home />} />
       </RouterRoutes>
+      </main>
       <footer className="footer">
         <p>7games — one account, every game.</p>
       </footer>

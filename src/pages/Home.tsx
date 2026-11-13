@@ -33,6 +33,11 @@ export default function Home() {
   return (
     <div className="page">
       <section className="hero">
+        <div className="hero-glow" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </div>
         <p className="eyebrow">One account. Every game.</p>
         <h1>
           Play everything.
@@ -81,8 +86,8 @@ export default function Home() {
         </div>
 
         <div className="game-grid">
-          {filtered.map((game) => (
-            <HomeCardWithBest key={game.id} game={game} />
+          {filtered.map((game, i) => (
+            <HomeCardWithBest key={game.id} game={game} index={i} />
           ))}
         </div>
 
@@ -97,7 +102,7 @@ export default function Home() {
 import { useBestForGame } from "../hooks/useBest";
 import type { Game } from "../catalog";
 
-function HomeCardWithBest({ game }: { game: Game }) {
+function HomeCardWithBest({ game, index }: { game: Game; index: number }) {
   const best = useBestForGame(game.id);
-  return <GameCard game={game} best={best} />;
+  return <GameCard game={game} best={best} index={index} />;
 }

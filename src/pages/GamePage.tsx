@@ -1,6 +1,7 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ExternalLink, Maximize, Minimize, MonitorPlay } from "lucide-react";
+import { GamePoster } from "../components/GamePoster";
 import { getGame, scoreLabel } from "../catalog";
 import { engines } from "../games";
 import { useAuthContext } from "../context/AuthContext";
@@ -23,6 +24,45 @@ export default function GamePage() {
   const saveScore = useSaveScore(user);
   const best = useBestForGame(id ?? "");
   const { leaders, loading } = useLeaderboard(id ?? "");
+  const stageRef = useRef<HTMLElement>(null);
+  // "full" = native Fullscreen API when available, otherwise a fixed overlay (e.g. iPhone Safari).
+  const [full, setFull] = useState(false);
+
+  useEffect(() => {
+    const sync = () => {
+      if (!document.fullscreenElement) setFull(false);
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFull(false);
+    };
+    document.documentElement.classList.add("no-scroll");
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.documentElement.classList.remove("no-scroll");
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+
+  const enterFull = useCallback(async () => {
+    setFull(true);
+    const el = stageRef.current;
+    try {
+      if (el?.requestFullscreen && !document.fullscreenElement) await el.requestFullscreen();
+    } catch {
+      /* fall back to the CSS overlay */
+    }
+  }, []);
+
+  const exitFull = useCallback(() => {
+    setFull(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (id && getGame(id)) trackGame("game_start", id);
@@ -58,11 +98,14 @@ export default function GamePage() {
       </Link>
 
       <header className="game-header" style={{ "--accent": game.accent } as React.CSSProperties}>
-        <p className="game-meta">
-          {game.category} · {game.difficulty} · ~{game.minutes} min
-        </p>
-        <h1>{game.title}</h1>
-        <p className="hero-sub">{game.description}</p>
+        <GamePoster game={game} size="hero" />
+        <div className="game-header-text">
+          <p className="game-meta">
+            {game.category} · {game.difficulty} · ~{game.minutes} min
+          </p>
+          <h1>{game.title}</h1>
+          <p className="hero-sub">{game.description}</p>
+        </div>
       </header>
 
       {!user ? (
@@ -75,8 +118,40 @@ export default function GamePage() {
         </div>
       ) : null}
 
+      <div
+        className="play-modes"
+        role="group"
+        aria-label="How to play"
+        style={{ "--accent": game.accent } as React.CSSProperties}
+      >
+        <button type="button" className={full ? "" : "active"} aria-pressed={!full} onClick={exitFull}>
+          <MonitorPlay size={16} />
+          Play here
+        </button>
+        <button type="button" className={full ? "active" : ""} aria-pressed={full} onClick={enterFull}>
+          <Maximize size={16} />
+          Full screen
+        </button>
+        {game.kind === "iframe" ? (
+          <a href={game.embedUrl} target="_blank" rel="noopener noreferrer">
+            <ExternalLink size={16} />
+            Open original site
+          </a>
+        ) : null}
+      </div>
+
       <div className="game-layout">
-        <section className="game-stage card">
+        <section
+          ref={stageRef}
+          className={`game-stage card${full ? " is-full" : ""}`}
+          style={{ "--accent": game.accent } as React.CSSProperties}
+        >
+          {full ? (
+            <button type="button" className="exit-full" onClick={exitFull} aria-label="Exit full screen">
+              <Minimize size={16} />
+              <span>Exit</span>
+            </button>
+          ) : null}
           {game.kind === "builtin" ? (
             <GameRunner gameId={game.engine} onScore={handleFinish} />
           ) : (
