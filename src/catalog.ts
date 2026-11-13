@@ -1,0 +1,239 @@
+export type GameCategory =
+  | "Strategy"
+  | "Puzzle"
+  | "Action"
+  | "Words"
+  | "Numbers"
+  | "Classic";
+
+export type GameEngine =
+  | "tictactoe"
+  | "memory"
+  | "reflex"
+  | "simon"
+  | "2048"
+  | "minesweeper"
+  | "hangman"
+  | "quiz"
+  | "math"
+  | "word"
+  | "higher-lower"
+  | "whack-a-mole"
+  | "color-match"
+  | "sliding-puzzle"
+  | "snake"
+  | "carrom";
+
+export type Game = {
+  id: string;
+  title: string;
+  category: GameCategory;
+  difficulty: "Easy" | "Medium" | "Hard";
+  minutes: number;
+  accent: string;
+  description: string;
+} & (
+  | { kind: "builtin"; engine: GameEngine }
+  | { kind: "iframe"; embedUrl: string }
+);
+
+export const categories: Array<GameCategory | "All"> = [
+  "All",
+  "Strategy",
+  "Puzzle",
+  "Action",
+  "Words",
+  "Numbers",
+  "Classic",
+];
+
+export const games: Game[] = [
+  {
+    id: "noughts",
+    title: "Noughts",
+    category: "Classic",
+    kind: "builtin",
+    engine: "tictactoe",
+    difficulty: "Easy",
+    minutes: 2,
+    accent: "#0071e3",
+    description: "The timeless three-by-three duel against a sharp opponent.",
+  },
+  {
+    id: "orbit-match",
+    title: "Orbit Match",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "memory",
+    difficulty: "Easy",
+    minutes: 4,
+    accent: "#5e5ce6",
+    description: "Flip tiles, find pairs, and clear the board in as few moves as possible.",
+  },
+  {
+    id: "pulse",
+    title: "Pulse",
+    category: "Action",
+    kind: "builtin",
+    engine: "reflex",
+    difficulty: "Easy",
+    minutes: 1,
+    accent: "#ff375f",
+    description: "Targets appear for a heartbeat. Tap them before they vanish.",
+  },
+  {
+    id: "echo",
+    title: "Echo",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "simon",
+    difficulty: "Medium",
+    minutes: 3,
+    accent: "#bf5af2",
+    description: "Watch the sequence, then play it back. It grows every round.",
+  },
+  {
+    id: "merge",
+    title: "Merge",
+    category: "Numbers",
+    kind: "builtin",
+    engine: "2048",
+    difficulty: "Medium",
+    minutes: 10,
+    accent: "#ff9f0a",
+    description: "Slide tiles, merge equals, and chase the elusive 2048 tile.",
+  },
+  {
+    id: "minefield",
+    title: "Minefield",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "minesweeper",
+    difficulty: "Hard",
+    minutes: 8,
+    accent: "#8e8e93",
+    description: "Reveal every safe cell. One wrong tap ends the run.",
+  },
+  {
+    id: "gallows",
+    title: "Gallows",
+    category: "Words",
+    kind: "builtin",
+    engine: "hangman",
+    difficulty: "Easy",
+    minutes: 3,
+    accent: "#30d158",
+    description: "Guess the hidden word one letter at a time. Six misses and it's over.",
+  },
+  {
+    id: "brainline",
+    title: "Brainline",
+    category: "Strategy",
+    kind: "builtin",
+    engine: "quiz",
+    difficulty: "Medium",
+    minutes: 3,
+    accent: "#64d2ff",
+    description: "Logic and trivia prompts with instant feedback. Three rounds.",
+  },
+  {
+    id: "number-rush",
+    title: "Number Rush",
+    category: "Numbers",
+    kind: "builtin",
+    engine: "math",
+    difficulty: "Medium",
+    minutes: 2,
+    accent: "#32d74b",
+    description: "Rapid-fire arithmetic. Answer fast, keep the streak alive.",
+  },
+  {
+    id: "typewave",
+    title: "Typewave",
+    category: "Words",
+    kind: "builtin",
+    engine: "word",
+    difficulty: "Easy",
+    minutes: 2,
+    accent: "#ff6482",
+    description: "Type the word exactly as shown before the timer drains.",
+  },
+  {
+    id: "skyline",
+    title: "Skyline",
+    category: "Numbers",
+    kind: "builtin",
+    engine: "higher-lower",
+    difficulty: "Easy",
+    minutes: 2,
+    accent: "#0a84ff",
+    description: "Will the next number be higher or lower? Build the longest streak.",
+  },
+  {
+    id: "mole patrol",
+    title: "Mole Patrol",
+    category: "Action",
+    kind: "builtin",
+    engine: "whack-a-mole",
+    difficulty: "Easy",
+    minutes: 1,
+    accent: "#ffd60a",
+    description: "Moles pop up fast. Tap them before they duck back down.",
+  },
+  {
+    id: "hue duo",
+    title: "Hue Duo",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "color-match",
+    difficulty: "Hard",
+    minutes: 2,
+    accent: "#ac8e68",
+    description: "Tap the odd shade out. The difference shrinks every level.",
+  },
+  {
+    id: "slide",
+    title: "Slide",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "sliding-puzzle",
+    difficulty: "Medium",
+    minutes: 6,
+    accent: "#6c6c70",
+    description: "The classic 15-puzzle. Shuffle numbers back into order.",
+  },
+  {
+    id: "serpent",
+    title: "Serpent",
+    category: "Classic",
+    kind: "builtin",
+    engine: "snake",
+    difficulty: "Medium",
+    minutes: 5,
+    accent: "#28c840",
+    description: "Eat, grow, and never bite yourself. Swipe or arrow keys to steer.",
+  },
+  {
+    id: "carrom",
+    title: "Carrom",
+    category: "Classic",
+    kind: "builtin",
+    engine: "carrom",
+    difficulty: "Medium",
+    minutes: 8,
+    accent: "#b3814c",
+    description: "Flick the striker, pocket your nine coins, and cover the queen to win.",
+  },
+];
+
+export function getGame(id: string | undefined): Game | undefined {
+  return games.find((game) => game.id === id);
+}
+
+export function scoreLabel(game: Game): string {
+  if (game.kind === "builtin" && game.engine === "minesweeper") return "Fastest win";
+  if (game.kind === "builtin" && game.engine === "sliding-puzzle") return "Fastest solve";
+  if (game.kind === "builtin" && game.engine === "memory") return "Best score";
+  if (game.kind === "builtin" && game.engine === "carrom") return "Best match";
+  return "High score";
+}

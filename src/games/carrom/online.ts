@@ -1,0 +1,295 @@
+/* Carrom online — Supabase Realtime rooms.
+   Host-authoritative: host simulates physics and streams snapshots;
+   guests send place/shot commands. Rooms are 4-character codes. */
+import { supabase, isSupabaseConfigured } from "../../supabase";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { LivePos, Seats, Snap, Vec } from "./engine";
+
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+export function newRoomCode() {
+  let code = "";
+  for (let i = 0; i < 4; i += 1) {
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+export type RosterEntry = { clientId: string; name: string; seat: number; isHost: boolean };
+
+export type NetStatus = "idle" | "connecting" | "lobby" | "playing" | "error";
+
+export type NetEvents = {
+  onStatus: (status: NetStatus, note?: string) => void;
+  onRoster: (roster: RosterEntry[], seats: Seats) => void;
+  onStart: (cfg: { seats: Seats; players: Array<{ name: string; kind: "human" | "cpu" }> }) => void;
+  onSnapshot: (snap: Snap) => void;
+  onLive: (positions: LivePos[]) => void;
+  onMessage: (text: string) => void;
+};
+
+type RealtimeChannel = ReturnType<typeof import("@supabase/supabase-js").createClient> extends infer C
+  ? C extends { channel: (...args: never[]) => infer R }
+    ? R
+    : never
+  : never;
+
+function randomId() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+export class CarromNet {
+  readonly clientId = randomId();
+  readonly isHostClient: boolean;
+  private channel: RealtimeChannel | null = null;
+  private code: string | null = null;
+  private roster: RosterEntry[] = [];
+  private seats: Seats = 2;
+  private joinedOrder: string[] = [];
+  private joinAckTimer: number | null = null;
+  private events: NetEvents;
+  private mySeat = 0;
+  private left = false;
+
+  private constructor(isHost: boolean, events: NetEvents) {
+    this.isHostClient = isHost;
+    this.events = events;
+  }
+
+  get roomCode() {
+    return this.code;
+  }
+
+  get mySeatIndex() {
+    return this.mySeat;
+  }
+
+  get rosterList() {
+    return this.roster;
+  }
+
+  static get configured() {
+    return isSupabaseConfigured && supabase !== null;
+  }
+
+  static createHost(name: string, seats: Seats, events: NetEvents): CarromNet {
+    const net = new CarromNet(true, events);
+    void net.host(name, seats);
+    return net;
+  }
+
+  static createGuest(name: string, code: string, events: NetEvents): CarromNet {
+    const net = new CarromNet(false, events);
+    void net.guest(name, code);
+    return net;
+  }
+
+  private makeChannel(code: string) {
+    if (!supabase) throw new Error("Supabase is not configured");
+    this.code = code;
+    const ch = supabase.channel(`carrom:${code}`, {
+      config: { broadcast: { self: false }, presence: { key: this.clientId } },
+    });
+    this.channel = ch;
+    return ch;
+  }
+
+  private async host(name: string, seats: Seats) {
+    if (!supabase) {
+      this.events.onStatus("error", "Online play is not configured.");
+      return;
+    }
+    this.events.onStatus("connecting");
+    this.seats = seats;
+    const code = newRoomCode();
+    const ch = this.makeChannel(code);
+
+    this.wirePresence(ch, name);
+    this.wireGuestMessages(ch);
+
+    ch.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({ name });
+        this.roster = [{ clientId: this.clientId, name, seat: 0, isHost: true }];
+        this.joinedOrder = [this.clientId];
+        this.events.onStatus("lobby");
+        this.events.onRoster([...this.roster], seats);
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        if (!this.left) this.events.onStatus("error", "Connection failed. Try again.");
+      }
+    });
+  }
+
+  private async guest(name: string, code: string) {
+    if (!supabase) {
+      this.events.onStatus("error", "Online play is not configured.");
+      return;
+    }
+    this.events.onStatus("connecting");
+    const clean = code.trim().toUpperCase();
+    if (clean.length !== 4) {
+      this.events.onStatus("error", "Room codes are 4 characters.");
+      return;
+    }
+    const ch = this.makeChannel(clean);
+
+    this.wirePresence(ch, name);
+    this.wireHostMessages(ch);
+
+    ch.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({ name });
+        // If no host roster arrives shortly, the room does not exist.
+        this.joinAckTimer = window.setTimeout(() => {
+          if (this.events && this.mySeat === 0 && this.roster.length === 0) {
+            this.events.onStatus("error", "No room found with that code.");
+          }
+        }, 3000);
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        if (!this.left) this.events.onStatus("error", "Connection failed. Try again.");
+      }
+    });
+  }
+
+  private wirePresence(ch: RealtimeChannel, _name: string) {
+    ch.on("presence", { event: "sync" }, () => {
+      if (!this.isHostClient) return;
+      const state = ch.presenceState<Record<string, { name: string }>>();
+      const keys = Object.keys(state);
+      // new keys (ignoring ones we already know) join after existing roster
+      for (const key of keys) {
+        if (!this.joinedOrder.includes(key)) this.joinedOrder.push(key);
+      }
+      this.joinedOrder = this.joinedOrder.filter((key) => keys.includes(key));
+
+      const roster: RosterEntry[] = [];
+      let seat = 0;
+      for (const key of this.joinedOrder) {
+        const meta = state[key]?.[0];
+        const name = (meta && meta.name) || "Player";
+        roster.push({
+          clientId: key,
+          name: key === this.clientId ? name : name,
+          seat,
+          isHost: key === this.clientId,
+        });
+        seat += 1;
+        if (seat >= this.seats) break;
+      }
+      const overflow = this.joinedOrder.length > this.seats;
+      this.roster = roster;
+      this.events.onRoster([...roster], this.seats);
+      if (overflow) {
+        this.send("room-full", {});
+      }
+    });
+  }
+
+  private wireGuestMessages(ch: RealtimeChannel) {
+    ch.on("broadcast", { event: "roster" }, ({ payload }) => {
+      const roster = (payload as { roster: RosterEntry[]; seats: Seats }).roster;
+      const seats = (payload as { seats: Seats }).seats;
+      this.roster = roster;
+      this.seats = seats;
+      const mine = roster.find((entry) => entry.clientId === this.clientId);
+      if (this.joinAckTimer) {
+        window.clearTimeout(this.joinAckTimer);
+        this.joinAckTimer = null;
+      }
+      if (!mine) {
+        this.events.onStatus("error", "That room is full.");
+        return;
+      }
+      this.mySeat = mine.seat;
+      this.events.onStatus("lobby");
+      this.events.onRoster(roster, seats);
+    });
+    ch.on("broadcast", { event: "room-full" }, () => {
+      this.events.onStatus("error", "That room is full.");
+    });
+    ch.on("broadcast", { event: "start" }, ({ payload }) => {
+      const p = payload as { seats: Seats; players: Array<{ name: string; kind: "human" | "cpu" }> };
+      this.events.onStatus("playing");
+      this.events.onStart(p);
+    });
+    ch.on("broadcast", { event: "snapshot" }, ({ payload }) => {
+      this.events.onSnapshot((payload as { snap: Snap }).snap);
+    });
+    ch.on("broadcast", { event: "live" }, ({ payload }) => {
+      this.events.onLive((payload as { positions: LivePos[] }).positions);
+    });
+    ch.on("broadcast", { event: "msg" }, ({ payload }) => {
+      this.events.onMessage((payload as { text: string }).text);
+    });
+  }
+
+  private wireHostMessages(ch: RealtimeChannel) {
+    ch.on("broadcast", { event: "place" }, ({ payload }) => {
+      const p = payload as { clientId: string; seat: number; t: number };
+      this.handlers.onPlace?.(p.seat, p.t);
+    });
+    ch.on("broadcast", { event: "shot" }, ({ payload }) => {
+      const p = payload as { clientId: string; seat: number; t: number; dir: Vec; power: number };
+      this.handlers.onShot?.(p.seat, p.t, p.dir, p.power);
+    });
+  }
+
+  private handlers: {
+    onPlace?: (seat: number, t: number) => void;
+    onShot?: (seat: number, t: number, dir: Vec, power: number) => void;
+  } = {};
+
+  onHostCommand(handlers: {
+    onPlace?: (seat: number, t: number) => void;
+    onShot?: (seat: number, t: number, dir: Vec, power: number) => void;
+  }) {
+    this.handlers = handlers;
+  }
+
+  private send(event: string, payload: unknown) {
+    if (!this.channel) return;
+    void this.channel.send({ type: "broadcast", event, payload });
+  }
+
+  broadcastRoster(started: boolean) {
+    this.send("roster", { roster: this.roster, seats: this.seats, started });
+  }
+
+  broadcastStart(cfg: { seats: Seats; players: Array<{ name: string; kind: "human" | "cpu" }> }) {
+    this.send("start", cfg);
+  }
+
+  broadcastSnapshot(snap: Snap) {
+    this.send("snapshot", { snap });
+  }
+
+  broadcastLive(positions: LivePos[]) {
+    this.send("live", { positions });
+  }
+
+  broadcastMsg(text: string) {
+    this.send("msg", { text });
+  }
+
+  sendPlace(seat: number, t: number) {
+    this.send("place", { clientId: this.clientId, seat, t: Math.round(t) });
+  }
+
+  sendShot(seat: number, t: number, dir: Vec, power: number) {
+    this.send("shot", {
+      clientId: this.clientId,
+      seat,
+      t: Math.round(t),
+      dir: { x: Math.round(dir.x * 1000) / 1000, y: Math.round(dir.y * 1000) / 1000 },
+      power: Math.round(power * 100) / 100,
+    });
+  }
+
+  leave() {
+    this.left = true;
+    if (this.channel && supabase) {
+      void supabase.removeChannel(this.channel);
+    }
+    this.channel = null;
+  }
+}
