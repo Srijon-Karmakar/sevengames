@@ -23,6 +23,7 @@ import {
   stepPhysics,
   type LivePos,
   type Player,
+  type SeatKind,
   type Seats,
   type Snap,
   type World,
@@ -299,7 +300,7 @@ export default function CarromGame({ onFinish }: GameProps) {
       },
       onStart: (cfg: { seats: Seats; players: Array<{ name: string; kind: "human" | "cpu" }> }) => {
         finishedRef.current = false;
-        const players: Player[] = cfg.players.map((p, i) => ({
+        const players = cfg.players.map((p, i): { seat: number; name: string; kind: SeatKind } => ({
           seat: i,
           name: p.name,
           kind: mySeatRef.current === i ? "human" : p.kind === "cpu" ? "cpu" : "remote",
@@ -377,8 +378,11 @@ export default function CarromGame({ onFinish }: GameProps) {
   function startNetGame() {
     const net = netRef.current;
     if (!net || !net.isHostClient) return;
-    const players = net.rosterList.map((entry) => ({ name: entry.name, kind: "human" as const }));
-    while (players.length < roomSeats) players.push({ name: "CPU", kind: "cpu" as const });
+    const players: Array<{ name: string; kind: "human" | "cpu" }> = net.rosterList.map((entry) => ({
+      name: entry.name,
+      kind: "human",
+    }));
+    while (players.length < roomSeats) players.push({ name: "CPU", kind: "cpu" });
     const cfg = { seats: roomSeats, players };
     net.broadcastStart(cfg);
     netEvents().onStart(cfg);

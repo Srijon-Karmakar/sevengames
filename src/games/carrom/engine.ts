@@ -597,7 +597,7 @@ export function applySnapshot(world: World, snap: Snap): World {
       ? { state: "board" }
       : snap.queen[0] === "p"
         ? { state: "pending", seat: snap.queen[1] }
-        : { state: "owned", color: snap.queen[2] };
+        : { state: "owned", color: snap.queen[1] };
   world.potted = potted;
   world.discs = discs;
   world.striker = striker;

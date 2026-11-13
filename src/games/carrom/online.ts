@@ -28,12 +28,6 @@ export type NetEvents = {
   onMessage: (text: string) => void;
 };
 
-type RealtimeChannel = ReturnType<typeof import("@supabase/supabase-js").createClient> extends infer C
-  ? C extends { channel: (...args: never[]) => infer R }
-    ? R
-    : never
-  : never;
-
 function randomId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
@@ -154,7 +148,7 @@ export class CarromNet {
   private wirePresence(ch: RealtimeChannel, _name: string) {
     ch.on("presence", { event: "sync" }, () => {
       if (!this.isHostClient) return;
-      const state = ch.presenceState<Record<string, { name: string }>>();
+      const state = ch.presenceState<{ name: string }>();
       const keys = Object.keys(state);
       // new keys (ignoring ones we already know) join after existing roster
       for (const key of keys) {
