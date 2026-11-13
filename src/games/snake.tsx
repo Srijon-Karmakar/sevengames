@@ -36,11 +36,11 @@ export default function SnakeGame({ onFinish }: GameProps) {
     if (!ctx) return;
 
     const cell = canvas.width / GRID;
-    ctx.fillStyle = "#fafafa";
+    ctx.fillStyle = "#050506";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // subtle grid
-    ctx.fillStyle = "#f0f0f2";
+    ctx.fillStyle = "#141417";
     for (let r = 0; r < GRID; r += 1) {
       for (let c = 0; c < GRID; c += 1) {
         if ((r + c) % 2 === 0) ctx.fillRect(c * cell, r * cell, cell, cell);
