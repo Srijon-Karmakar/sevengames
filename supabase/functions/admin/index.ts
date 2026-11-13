@@ -24,7 +24,7 @@ const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 const enc = new TextEncoder();
 
 const db = createClient(
-  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_U RL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { auth: { persistSession: false } },
 );
