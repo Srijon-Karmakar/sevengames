@@ -1416,3 +1416,63 @@ h3 {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Canvas arcade games (Stack, Dodge) */
+.arcade-canvas {
+  width: 100%;
+  max-width: 300px;
+  aspect-ratio: 300 / 420;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  touch-action: none;
+  cursor: pointer;
+}
+
+/* Connect Four */
+.c4-board {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 8px;
+  width: 100%;
+  max-width: 340px;
+  background: #0058b0;
+  border-radius: var(--radius-small);
+}
+.c4-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.c4-cell {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #fafafa;
+}
+.c4-cell.p1 { background: #5ac8fa; }
+.c4-cell.p2 { background: #ffd60a; }
+
+/* Lights Out */
+.lights-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.light {
+  aspect-ratio: 1;
+  border-radius: var(--radius-small);
+  border: 1px solid var(--border);
+  background: #2c2c2e;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.light.on {
+  background: #ffd60a;
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.6);
+}

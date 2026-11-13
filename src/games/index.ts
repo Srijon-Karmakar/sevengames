@@ -15,6 +15,10 @@ import ColorMatch from "./color-match";
 import SlidingPuzzle from "./sliding-puzzle";
 import SnakeGame from "./snake";
 import CarromGame from "./carrom";
+import StackGame from "./stack";
+import DodgeGame from "./dodge";
+import ConnectFour from "./connect-four";
+import LightsOut from "./lights-out";
 
 export type GameProps = {
   /** Call once when the round ends with the final score (or time in seconds for timed games). */
@@ -38,6 +42,10 @@ export const engines: Record<GameEngine, (props: GameProps) => React.JSX.Element
   "sliding-puzzle": SlidingPuzzle,
   snake: SnakeGame,
   carrom: CarromGame,
+  stack: StackGame,
+  dodge: DodgeGame,
+  "connect-four": ConnectFour,
+  "lights-out": LightsOut,
 };
 
 export function shuffle<T>(items: T[]): T[] {

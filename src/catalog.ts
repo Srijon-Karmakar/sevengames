@@ -22,7 +22,11 @@ export type GameEngine =
   | "color-match"
   | "sliding-puzzle"
   | "snake"
-  | "carrom";
+  | "carrom"
+  | "stack"
+  | "dodge"
+  | "connect-four"
+  | "lights-out";
 
 export type Game = {
   id: string;
@@ -48,6 +52,50 @@ export const categories: Array<GameCategory | "All"> = [
 ];
 
 export const games: Game[] = [
+  {
+    id: "yat-c",
+    title: "YAT-C",
+    category: "Strategy",
+    kind: "iframe",
+    embedUrl: "https://amarpara.onrender.com",
+    difficulty: "Medium",
+    minutes: 10,
+    accent: "#34c759",
+    description: "You And The City. Explore and shape a city of your own.",
+  },
+  {
+    id: "infitunnel",
+    title: "Infitunnel",
+    category: "Action",
+    kind: "iframe",
+    embedUrl: "https://infitunnel.onrender.com",
+    difficulty: "Hard",
+    minutes: 5,
+    accent: "#bf5af2",
+    description: "An endless tunnel run. Keep going and see how far you can get.",
+  },
+  {
+    id: "publicport",
+    title: "PublicPort",
+    category: "Classic",
+    kind: "iframe",
+    embedUrl: "https://pathik-tau.vercel.app/",
+    difficulty: "Medium",
+    minutes: 10,
+    accent: "#ff6b35",
+    description: "Drive real metro, train, tram, bus and ferry routes in any city on Earth.",
+  },
+  {
+    id: "pov-cricket",
+    title: "POV Cricket",
+    category: "Action",
+    kind: "iframe",
+    embedUrl: "https://pov-cricket.onrender.com",
+    difficulty: "Medium",
+    minutes: 5,
+    accent: "#0a84ff",
+    description: "Cricket from the batter's point of view. Time your shots and score big.",
+  },
   {
     id: "noughts",
     title: "Noughts",
@@ -223,6 +271,50 @@ export const games: Game[] = [
     minutes: 8,
     accent: "#b3814c",
     description: "Flick the striker, pocket your nine coins, and cover the queen to win.",
+  },
+  {
+    id: "stack",
+    title: "Stack",
+    category: "Action",
+    kind: "builtin",
+    engine: "stack",
+    difficulty: "Medium",
+    minutes: 3,
+    accent: "#ff9f0a",
+    description: "Drop sliding blocks and build the tallest tower. Misaligned edges get sliced off.",
+  },
+  {
+    id: "dodge",
+    title: "Dodge",
+    category: "Action",
+    kind: "builtin",
+    engine: "dodge",
+    difficulty: "Medium",
+    minutes: 3,
+    accent: "#ff375f",
+    description: "Weave through a rain of falling blocks. Every second survived counts.",
+  },
+  {
+    id: "connect-four",
+    title: "Connect Four",
+    category: "Strategy",
+    kind: "builtin",
+    engine: "connect-four",
+    difficulty: "Medium",
+    minutes: 5,
+    accent: "#32ade6",
+    description: "Line up four discs before the CPU does. Faster wins score higher.",
+  },
+  {
+    id: "lights-out",
+    title: "Lights Out",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "lights-out",
+    difficulty: "Hard",
+    minutes: 5,
+    accent: "#ffd60a",
+    description: "Each tap flips a light and its neighbours. Switch them all off in few moves.",
   },
 ];
 
