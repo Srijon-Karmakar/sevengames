@@ -3,11 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { categories, games, type GameCategory } from "../catalog";
 import { GameCard } from "../components/GameCard";
+import AdBox from "../components/AdBox";
+import { useSiteSettings } from "../lib/siteSettings";
 
 export default function Home() {
   const [params, setParams] = useSearchParams();
   const category = (params.get("category") as GameCategory | null) ?? null;
   const [query, setQuery] = useState("");
+  const settings = useSiteSettings();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -41,6 +44,14 @@ export default function Home() {
           that follows your account to any device.
         </p>
       </section>
+
+      {settings.announcement_enabled && settings.announcement_text ? (
+        <div className="announce" role="status">
+          {settings.announcement_text}
+        </div>
+      ) : null}
+
+      <AdBox />
 
       <section className="library" id="games">
         <div className="library-head">

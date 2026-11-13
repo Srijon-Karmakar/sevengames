@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { getGame, scoreLabel } from "../catalog";
@@ -7,6 +7,7 @@ import { useAuthContext } from "../context/AuthContext";
 import { useLeaderboard, useSaveScore } from "../lib/scores";
 import { useBestForGame } from "../hooks/useBest";
 import Leaderboard from "../components/Leaderboard";
+import { trackGame } from "../lib/track";
 
 function GameRunner({ gameId, onScore }: { gameId: string; onScore: (score: number) => void }) {
   const Engine = engines[gameId as keyof typeof engines];
@@ -23,6 +24,10 @@ export default function GamePage() {
   const best = useBestForGame(id ?? "");
   const { leaders, loading } = useLeaderboard(id ?? "");
 
+  useEffect(() => {
+    if (id && getGame(id)) trackGame("game_start", id);
+  }, [id]);
+
   if (!game) {
     return (
       <div className="page narrow">
@@ -37,7 +42,10 @@ export default function GamePage() {
 
   const handleFinish = useCallback(
     async (score: number) => {
-      if (game) await saveScore(game.id, score, 0);
+      if (game) {
+        trackGame("game_finish", game.id, score);
+        await saveScore(game.id, score, 0);
+      }
     },
     [game, saveScore],
   );

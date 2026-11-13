@@ -1,0 +1,422 @@
+// 7games admin API (Supabase Edge Function, Deno).
+//
+// Secrets (set with `supabase secrets set`):
+//   ADMIN_PASSWORD          required – the admin panel password
+//   ADMIN_TOKEN_SECRET      optional – HMAC key for session tokens (falls back to ADMIN_PASSWORD)
+//   CLOUDINARY_CLOUD_NAME   required for image uploads
+//   CLOUDINARY_API_KEY      required for image uploads
+//   CLOUDINARY_API_SECRET   required for image uploads
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
+//
+// Every request is POST JSON: { action, token?, ...payload }.
+// `login` exchanges the password for a short-lived signed token; all other
+// actions require that token.
+
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
+const enc = new TextEncoder();
+
+const db = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false } },
+);
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
+
+/* ---------- crypto helpers ---------- */
+
+const hex = (buf: ArrayBuffer) =>
+  [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+async function hmac(key: string, msg: string) {
+  const k = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", k, enc.encode(msg)));
+}
+
+// Constant-time string compare via HMAC of both sides.
+async function safeEqual(a: string, b: string) {
+  const [x, y] = await Promise.all([hmac("cmp", a), hmac("cmp", b)]);
+  let diff = 0;
+  for (let i = 0; i < x.length; i += 1) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+const tokenKey = () => Deno.env.get("ADMIN_TOKEN_SECRET") || Deno.env.get("ADMIN_PASSWORD") || "";
+
+async function makeToken() {
+  const exp = String(Date.now() + TOKEN_TTL_MS);
+  return { token: `${exp}.${await hmac(tokenKey(), exp)}`, expires: Number(exp) };
+}
+
+async function verifyToken(token: unknown) {
+  if (typeof token !== "string") return false;
+  const [exp, sig] = token.split(".");
+  if (!exp || !sig || Number(exp) < Date.now()) return false;
+  return safeEqual(sig, await hmac(tokenKey(), exp));
+}
+
+/* ---------- crude brute-force throttle (per instance) ---------- */
+
+const failures = new Map<string, { n: number; until: number }>();
+
+function throttled(ip: string) {
+  const f = failures.get(ip);
+  return Boolean(f && f.n >= 5 && f.until > Date.now());
+}
+function noteFailure(ip: string) {
+  const f = failures.get(ip) ?? { n: 0, until: 0 };
+  f.n += 1;
+  f.until = Date.now() + 10 * 60 * 1000;
+  failures.set(ip, f);
+}
+
+/* ---------- stats ---------- */
+
+type EventRow = {
+  created_at: string;
+  visitor_id: string;
+  type: string;
+  path: string | null;
+  game_id: string | null;
+  ad_id: string | null;
+  referrer: string | null;
+  device: string | null;
+  score: number | null;
+};
+
+async function fetchEvents(sinceIso: string): Promise<EventRow[]> {
+  const rows: EventRow[] = [];
+  const page = 1000;
+  for (let from = 0; from < 100_000; from += page) {
+    const { data, error } = await db
+      .from("events")
+      .select("created_at, visitor_id, type, path, game_id, ad_id, referrer, device, score")
+      .gte("created_at", sinceIso)
+      .order("created_at", { ascending: true })
+      .range(from, from + page - 1);
+    if (error) throw error;
+    rows.push(...(data as EventRow[]));
+    if (!data || data.length < page) break;
+  }
+  return rows;
+}
+
+const dayKey = (iso: string) => iso.slice(0, 10);
+
+function topN(map: Map<string, number>, n: number) {
+  return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+async function stats(daysInput: unknown) {
+  const days = Math.min(90, Math.max(1, Number(daysInput) || 30));
+  const since = new Date(Date.now() - days * 86_400_000);
+  since.setUTCHours(0, 0, 0, 0);
+  const events = await fetchEvents(since.toISOString());
+
+  const visitors = new Set<string>();
+  const perDay = new Map<string, { views: number; visitors: Set<string> }>();
+  for (let i = 0; i <= days; i += 1) {
+    const d = new Date(since.getTime() + i * 86_400_000).toISOString().slice(0, 10);
+    perDay.set(d, { views: 0, visitors: new Set() });
+  }
+  const pages = new Map<string, number>();
+  const referrers = new Map<string, number>();
+  const devices = new Map<string, number>();
+  const hours = Array<number>(24).fill(0);
+  const games = new Map<string, { starts: number; finishes: number; scoreSum: number; players: Set<string> }>();
+  const ads = new Map<string, { impressions: number; clicks: number }>();
+  let views = 0;
+  let starts = 0;
+  let finishes = 0;
+
+  for (const e of events) {
+    if (e.type === "pageview") {
+      views += 1;
+      visitors.add(e.visitor_id);
+      const bucket = perDay.get(dayKey(e.created_at));
+      if (bucket) {
+        bucket.views += 1;
+        bucket.visitors.add(e.visitor_id);
+      }
+      pages.set(e.path || "/", (pages.get(e.path || "/") ?? 0) + 1);
+      devices.set(e.device || "unknown", (devices.get(e.device || "unknown") ?? 0) + 1);
+      hours[new Date(e.created_at).getUTCHours()] += 1;
+      if (e.referrer) {
+        let host = e.referrer;
+        try {
+          host = new URL(e.referrer).hostname;
+        } catch {
+          /* keep raw */
+        }
+        referrers.set(host, (referrers.get(host) ?? 0) + 1);
+      } else {
+        referrers.set("(direct)", (referrers.get("(direct)") ?? 0) + 1);
+      }
+    } else if (e.type === "game_start" || e.type === "game_finish") {
+      const id = e.game_id || "unknown";
+      const g = games.get(id) ?? { starts: 0, finishes: 0, scoreSum: 0, players: new Set<string>() };
+      g.players.add(e.visitor_id);
+      if (e.type === "game_start") {
+        g.starts += 1;
+        starts += 1;
+      } else {
+        g.finishes += 1;
+        g.scoreSum += e.score ?? 0;
+        finishes += 1;
+      }
+      games.set(id, g);
+    } else if ((e.type === "ad_impression" || e.type === "ad_click") && e.ad_id) {
+      const a = ads.get(e.ad_id) ?? { impressions: 0, clicks: 0 };
+      if (e.type === "ad_impression") a.impressions += 1;
+      else a.clicks += 1;
+      ads.set(e.ad_id, a);
+    }
+  }
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const today = perDay.get(todayKey);
+
+  const [profiles, newProfiles, scores] = await Promise.all([
+    db.from("profiles").select("id", { count: "exact", head: true }),
+    db.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", since.toISOString()),
+    db.from("game_scores").select("id", { count: "exact", head: true }),
+  ]);
+
+  const recent = events.slice(-25).reverse().map((e) => ({
+    at: e.created_at,
+    type: e.type,
+    path: e.path,
+    game_id: e.game_id,
+    device: e.device,
+  }));
+
+  return {
+    days,
+    totals: {
+      pageviews: views,
+      visitors: visitors.size,
+      todayViews: today?.views ?? 0,
+      todayVisitors: today?.visitors.size ?? 0,
+      gameStarts: starts,
+      gameFinishes: finishes,
+      users: profiles.count ?? 0,
+      newUsers: newProfiles.count ?? 0,
+      scoresSaved: scores.count ?? 0,
+    },
+    daily: [...perDay.entries()].map(([date, v]) => ({ date, views: v.views, visitors: v.visitors.size })),
+    pages: topN(pages, 12),
+    referrers: topN(referrers, 10),
+    devices: topN(devices, 5),
+    hours,
+    games: [...games.entries()]
+      .map(([id, g]) => ({
+        id,
+        starts: g.starts,
+        finishes: g.finishes,
+        players: g.players.size,
+        avgScore: g.finishes ? Math.round(g.scoreSum / g.finishes) : 0,
+      }))
+      .sort((a, b) => b.starts - a.starts),
+    ads: Object.fromEntries(ads),
+    recent,
+  };
+}
+
+/* ---------- ads ---------- */
+
+const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const optText = (v: unknown, max: number) => text(v, max) || null;
+const optDate = (v: unknown) => {
+  if (typeof v !== "string" || !v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+const optTime = (v: unknown) => (typeof v === "string" && /^\d{2}:\d{2}(:\d{2})?$/.test(v) ? v : null);
+const httpUrl = (v: unknown) => {
+  const s = text(v, 800);
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" || u.protocol === "http:" ? s : "";
+  } catch {
+    return "";
+  }
+};
+
+function cleanAd(input: Record<string, unknown>) {
+  const title = text(input.title, 120);
+  const link = httpUrl(input.link_url);
+  if (!title) throw new Error("Title is required");
+  if (!link) throw new Error("A valid http(s) link is required");
+  const max = Number(input.max_impressions);
+  return {
+    title,
+    link_url: link,
+    cover_url: httpUrl(input.cover_url) || null,
+    thumb_url: httpUrl(input.thumb_url) || null,
+    body: optText(input.body, 240),
+    cta_label: text(input.cta_label, 30) || "Learn more",
+    active: input.active !== false,
+    starts_at: optDate(input.starts_at),
+    ends_at: optDate(input.ends_at),
+    daily_start: optTime(input.daily_start),
+    daily_end: optTime(input.daily_end),
+    max_impressions: Number.isFinite(max) && max > 0 ? Math.floor(max) : null,
+    sort_order: Number.isFinite(Number(input.sort_order)) ? Math.floor(Number(input.sort_order)) : 0,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/* ---------- settings ---------- */
+
+const SETTING_KEYS: Record<string, "boolean" | "number" | "string"> = {
+  ads_enabled: "boolean",
+  ad_rotate_seconds: "number",
+  tracking_enabled: "boolean",
+  announcement_enabled: "boolean",
+  announcement_text: "string",
+};
+
+/* ---------- Cloudinary signed upload ---------- */
+
+async function sha1Hex(s: string) {
+  return hex(await crypto.subtle.digest("SHA-1", enc.encode(s)));
+}
+
+async function cloudinarySignature() {
+  const cloud = Deno.env.get("CLOUDINARY_CLOUD_NAME");
+  const key = Deno.env.get("CLOUDINARY_API_KEY");
+  const secret = Deno.env.get("CLOUDINARY_API_SECRET");
+  if (!cloud || !key || !secret) throw new Error("Cloudinary secrets are not configured");
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = "7games/ads";
+  // Params must be alphabetical, joined with &, then the secret appended.
+  const signature = await sha1Hex(`folder=${folder}&timestamp=${timestamp}${secret}`);
+  return { cloud_name: cloud, api_key: key, timestamp, folder, signature };
+}
+
+/* ---------- router ---------- */
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+
+  const action = String(body.action ?? "");
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
+
+  try {
+    if (action === "login") {
+      const password = Deno.env.get("ADMIN_PASSWORD");
+      if (!password) return json({ error: "ADMIN_PASSWORD is not configured on the server" }, 500);
+      if (throttled(ip)) return json({ error: "Too many attempts. Try again in a few minutes." }, 429);
+      const given = typeof body.password === "string" ? body.password : "";
+      if (!(await safeEqual(given, password))) {
+        noteFailure(ip);
+        await new Promise((r) => setTimeout(r, 600));
+        return json({ error: "Wrong password" }, 401);
+      }
+      failures.delete(ip);
+      return json(await makeToken());
+    }
+
+    if (!(await verifyToken(body.token))) return json({ error: "Session expired" }, 401);
+
+    switch (action) {
+      case "ping":
+        return json({ ok: true });
+
+      case "stats":
+        return json(await stats(body.days));
+
+      case "ads_list": {
+        const { data, error } = await db
+          .from("ads")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return json({ ads: data });
+      }
+
+      case "ad_save": {
+        const ad = (body.ad ?? {}) as Record<string, unknown>;
+        const values = cleanAd(ad);
+        if (typeof ad.id === "string" && ad.id) {
+          const { data, error } = await db.from("ads").update(values).eq("id", ad.id).select().single();
+          if (error) throw error;
+          return json({ ad: data });
+        }
+        const { data, error } = await db.from("ads").insert(values).select().single();
+        if (error) throw error;
+        return json({ ad: data });
+      }
+
+      case "ad_delete": {
+        const { error } = await db.from("ads").delete().eq("id", String(body.id ?? ""));
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      case "ad_reset_counts": {
+        const { error } = await db
+          .from("ads")
+          .update({ impressions: 0, clicks: 0 })
+          .eq("id", String(body.id ?? ""));
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      case "settings_get": {
+        const { data, error } = await db.from("site_settings").select("key, value");
+        if (error) throw error;
+        return json({ settings: Object.fromEntries((data ?? []).map((r) => [r.key, r.value])) });
+      }
+
+      case "settings_save": {
+        const input = (body.settings ?? {}) as Record<string, unknown>;
+        const rows: { key: string; value: unknown; updated_at: string }[] = [];
+        for (const [key, kind] of Object.entries(SETTING_KEYS)) {
+          if (!(key in input)) continue;
+          let value: unknown = input[key];
+          if (kind === "boolean") value = Boolean(value);
+          else if (kind === "number") value = Math.min(120, Math.max(2, Number(value) || 8));
+          else value = text(value, 280);
+          rows.push({ key, value, updated_at: new Date().toISOString() });
+        }
+        if (rows.length) {
+          const { error } = await db.from("site_settings").upsert(rows);
+          if (error) throw error;
+        }
+        return json({ ok: true });
+      }
+
+      case "upload_sign":
+        return json(await cloudinarySignature());
+
+      default:
+        return json({ error: "Unknown action" }, 400);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Server error";
+    return json({ error: message }, 400);
+  }
+});

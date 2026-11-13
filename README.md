@@ -64,3 +64,32 @@ render.yaml           # Render static site config
 **Scoring:** most games score higher-is-better; Minefield and Slide record time in seconds (lower is better) — handled consistently across leaderboards and personal bests via `isLowerBetter()`.
 
 **Guests** can play everything; their scores stay on the device. Signing in later keeps device scores locally and new rounds sync to the account.
+
+## Admin panel (`/admin`)
+
+Traffic, game stats, ads and site settings, behind a password that lives **only** as a Supabase secret (never in the browser bundle).
+
+**One-time setup**
+
+1. Run [`supabase/admin.sql`](supabase/admin.sql) in the Supabase SQL Editor (after `schema.sql`). It adds `ads`, `events`, `site_settings` and the `record_ad_event()` function, all under RLS.
+2. Create a free [Cloudinary](https://cloudinary.com) account (for ad images).
+3. Set the secrets and deploy the Edge Function ([Supabase CLI](https://supabase.com/docs/guides/cli)):
+
+   ```bash
+   supabase login
+   supabase link --project-ref <your-project-ref>
+   supabase secrets set ADMIN_PASSWORD='choose-a-long-password' \
+     ADMIN_TOKEN_SECRET='another-long-random-string' \
+     CLOUDINARY_CLOUD_NAME=... CLOUDINARY_API_KEY=... CLOUDINARY_API_SECRET=...
+   supabase functions deploy admin
+   ```
+
+4. Open `https://<your-site>/admin` and sign in. Sessions last 8 hours.
+
+**What it does**
+
+- **Overview / Traffic / Games:** page views, unique visitors, devices, referrers, busiest hours, per-game starts, completion and average score, live event feed.
+- **Ads:** create/edit/pause/delete ads with title, link, cover + thumbnail (uploaded to Cloudinary), start/end date-time, a daily time window (viewer's local time, may cross midnight), and quantity (max impressions). The home page shows a rotating "Sponsored" box of ads that are currently eligible; the impression cap is enforced in the database.
+- **Settings:** toggle ads, rotation speed, analytics collection, and a home-page announcement banner.
+
+**Notes:** analytics are first-party (a random visitor id in `localStorage`, no cookies, no IP stored). The stats endpoint reads up to 100k events per request, which is plenty for a small site. Ad counters/clicks come from the browser, so treat them as good estimates rather than audited numbers.

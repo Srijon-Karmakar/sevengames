@@ -1,4 +1,5 @@
-import { Route, Routes as RouterRoutes } from "react-router-dom";
+import { useEffect } from "react";
+import { Route, Routes as RouterRoutes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
 import Nav from "./components/Nav";
 import Home from "./pages/Home";
@@ -6,9 +7,16 @@ import GamePage from "./pages/GamePage";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import AuthCallback from "./pages/AuthCallback";
+import Admin from "./pages/admin/Admin";
+import { trackPageview } from "./lib/track";
 
 function Shell() {
   const auth = useAuthContext();
+
+  const location = useLocation();
+  useEffect(() => {
+    trackPageview(location.pathname);
+  }, [location.pathname]);
 
   function handleSignOut() {
     void auth.signOut();
@@ -35,7 +43,10 @@ function Shell() {
 export default function App() {
   return (
     <AuthProvider>
-      <Shell />
+      <RouterRoutes>
+        <Route path="/admin/*" element={<Admin />} />
+        <Route path="*" element={<Shell />} />
+      </RouterRoutes>
     </AuthProvider>
   );
 }
