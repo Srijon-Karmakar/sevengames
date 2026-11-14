@@ -67,7 +67,9 @@ export function posterIcon(game: Game): LucideIcon {
  * Game poster. Uses `game.poster` (an image URL) when set; otherwise draws a
  * generated poster from the game's accent colour and icon.
  */
-export function GamePoster({ game, size = "card" }: { game: Game; size?: "card" | "hero" }) {
+export type PosterSize = "card" | "portrait" | "hero" | "thumb";
+
+export function GamePoster({ game, size = "card" }: { game: Game; size?: PosterSize }) {
   const [failed, setFailed] = useState(false);
   const Icon = posterIcon(game);
   const hasImage = Boolean(game.poster) && !failed;
@@ -83,11 +85,11 @@ export function GamePoster({ game, size = "card" }: { game: Game; size?: "card" 
           <span className="poster-ring r2" />
           <span className="poster-mono">{game.title.slice(0, 1)}</span>
           <span className="poster-icon">
-            <Icon size={size === "hero" ? 40 : 30} strokeWidth={1.75} />
+            <Icon size={size === "hero" ? 40 : size === "thumb" ? 20 : 30} strokeWidth={1.75} />
           </span>
         </>
       )}
-      {game.kind === "iframe" ? <span className="poster-badge">Web</span> : null}
+      {game.kind === "iframe" && size !== "thumb" ? <span className="poster-badge">Web</span> : null}
     </div>
   );
 }

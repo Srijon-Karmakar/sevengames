@@ -133,15 +133,6 @@ h3 {
   font-size: clamp(22px, 3vw, 30px);
 }
 
-/* ---------- Interactive dot-grid background ---------- */
-
-.bg-dots {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
-
 /* ---------- Keyframes ---------- */
 
 /* Uses individual translate/scale so hover `transform`s still apply. */

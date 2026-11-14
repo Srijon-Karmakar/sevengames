@@ -1,0 +1,1539 @@
+/* ============================================================
+   7games — "Orbit" theme (reference redesign)
+   Loaded last: orange glow accent, layered scene background,
+   icon rail, 3D poster ring hero, glass panels.
+   ============================================================ */
+
+:root {
+  --orange: #ff7a1a;
+  --orange-2: #ffb347;
+  --orange-deep: #e85d04;
+  --accent: var(--orange);
+  --accent-hover: #ff9142;
+  --orange-grad: linear-gradient(180deg, #ff9443, #f26a0c);
+  --orange-glow: 0 0 0 1px rgba(255, 122, 26, 0.35), 0 8px 26px -6px rgba(255, 122, 26, 0.75);
+
+  --glass: rgba(16, 11, 8, 0.58);
+  --glass-strong: rgba(12, 9, 7, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.09);
+
+  --nav-height: 64px;
+  --rail-w: 72px;
+  --page-max: 1360px;
+}
+
+/* ---------- Scene (layered background) ---------- */
+
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+  background: #000;
+}
+
+.scene-fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 45% at 68% 70%, rgba(255, 122, 26, 0.3), transparent 70%),
+    radial-gradient(55% 35% at 18% 80%, rgba(255, 80, 20, 0.16), transparent 70%),
+    radial-gradient(90% 55% at 50% -5%, rgba(96, 52, 150, 0.32), transparent 70%),
+    linear-gradient(180deg, #07040c 0%, #120a10 42%, #1c0e06 72%, #000 100%);
+}
+
+/* Every layer shares the same box and crop, so the painting keeps its exact composition.
+   The 2% overscan only covers the small mouse-parallax travel (see ParallaxBackground.tsx). */
+.scene-layer {
+  position: absolute;
+  inset: -2%;
+}
+
+.scene.live .scene-layer:not([data-depth="0"]) {
+  will-change: transform;
+}
+
+.scene-layer img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  user-select: none;
+}
+
+/* Embers/petals: a slow idle drift on the image, independent of parallax */
+.scene-layer.float img {
+  animation: ember-drift 14s ease-in-out infinite alternate;
+}
+
+@keyframes ember-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-1.2%, -2.2%, 0); }
+}
+
+.scene-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 13%, transparent 70%, rgba(0, 0, 0, 0.6) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.3), transparent 36%);
+}
+
+/* Fades the scene toward black as you scroll into content (--bg-dim set in JS) */
+.scene-shade::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: calc(var(--bg-dim, 0) * 0.8);
+}
+
+/* ---------- Shared bits ---------- */
+
+.brand-mark {
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #ffc27a, var(--orange) 55%, #b8400a);
+  box-shadow: 0 0 18px rgba(255, 122, 26, 0.55);
+}
+
+.primary-btn {
+  background: var(--orange-grad);
+  color: #fff;
+  font-weight: 600;
+  padding: 13px 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 10px 28px -8px rgba(255, 122, 26, 0.85);
+}
+
+.primary-btn:hover:not(:disabled) {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 14px 34px -8px rgba(255, 122, 26, 0.95);
+}
+
+a {
+  color: var(--orange-2);
+}
+
+.search-box {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  color: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.search-box input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ---------- Top nav ---------- */
+
+.nav {
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  box-shadow: none;
+}
+
+.nav.scrolled {
+  background: rgba(6, 4, 3, 0.74);
+  border-bottom-color: var(--glass-border);
+  box-shadow: none;
+}
+
+.nav-inner {
+  max-width: none;
+  height: var(--nav-height);
+  gap: clamp(14px, 3vw, 40px);
+}
+
+.brand {
+  font-size: 20px;
+}
+
+.nav-links {
+  margin: 0;
+  gap: 4px;
+}
+
+.nav-link {
+  position: relative;
+  padding: 8px 14px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.nav-link:hover {
+  color: #fff;
+  background: none;
+}
+
+.nav-link.active {
+  color: #fff;
+}
+
+.nav-link.active::after {
+  content: "";
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--orange);
+  box-shadow: 0 0 10px var(--orange);
+}
+
+.nav-search {
+  margin-left: auto;
+  width: min(380px, 34vw);
+  min-width: 0;
+}
+
+.search-box.nav-search:focus-within {
+  min-width: 0;
+}
+
+.nav-actions {
+  margin-left: 0;
+  gap: 10px;
+}
+
+.nav-signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  border: 1px solid rgba(255, 122, 26, 0.55);
+  background: rgba(255, 122, 26, 0.12);
+  transition: background var(--dur) ease, box-shadow var(--dur) ease;
+}
+
+.nav-signin:hover {
+  background: rgba(255, 122, 26, 0.24);
+  box-shadow: 0 0 18px -4px rgba(255, 122, 26, 0.7);
+}
+
+.nav-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.75);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+
+.nav-icon-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 122, 26, 0.5);
+}
+
+.nav-avatar .avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 122, 26, 0.6);
+}
+
+.library-search {
+  display: none;
+}
+
+/* ---------- Icon rail (desktop) / bottom tab bar (mobile) ---------- */
+
+.rail {
+  position: fixed;
+  z-index: 90;
+  left: 16px;
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 26px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+  animation: fade 0.6s ease 0.2s both;
+}
+
+.rail-item {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: rgba(255, 255, 255, 0.6);
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur) var(--ease-out),
+    box-shadow var(--dur) ease,
+    transform var(--dur-fast) ease;
+}
+
+.rail-item:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rail-item:active {
+  transform: scale(0.94);
+}
+
+.rail-item.active {
+  color: #fff;
+  background: var(--orange-grad);
+  box-shadow: var(--orange-glow);
+}
+
+.rail-label {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  translate: 0 -50%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #fff;
+  background: rgba(10, 8, 6, 0.94);
+  border: 1px solid var(--glass-border);
+  opacity: 0;
+  transform: translateX(-4px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+}
+
+.rail-item:hover .rail-label,
+.rail-item:focus-visible .rail-label {
+  opacity: 1;
+  transform: none;
+}
+
+@media (min-width: 1024px) {
+  .route,
+  .footer {
+    padding-left: calc(var(--rail-w) + 20px);
+  }
+}
+
+@media (max-width: 1023px) {
+  .rail {
+    top: auto;
+    left: 50%;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    translate: -50% 0;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 2px;
+    width: min(calc(100% - 20px), 520px);
+    padding: 6px;
+    border-radius: 22px;
+    background: rgba(12, 9, 7, 0.82);
+  }
+
+  .rail-item {
+    flex: 1;
+    width: auto;
+    height: 54px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 16px;
+  }
+
+  .rail-label {
+    position: static;
+    translate: none;
+    transform: none;
+    opacity: 1;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 10.5px;
+    color: inherit;
+  }
+
+  .footer {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---------- Page ---------- */
+
+.page {
+  max-width: var(--page-max);
+}
+
+.home.page {
+  padding-top: clamp(8px, 2vw, 24px);
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 250px;
+  grid-template-areas: "copy ring promos";
+  align-items: center;
+  gap: clamp(16px, 2vw, 32px);
+  min-height: min(660px, calc(100svh - var(--nav-height) - 24px));
+  padding: 0 0 clamp(8px, 2vw, 24px);
+}
+
+.hero::before {
+  inset: -6% 52% 18% -24%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.22) 60%, transparent);
+}
+
+.hero-copy {
+  grid-area: copy;
+  position: relative;
+  z-index: 1;
+  container-type: inline-size;
+}
+
+.hero-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+  margin-bottom: clamp(14px, 2vw, 22px);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--orange-2);
+}
+
+.hero-kicker i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.hero h1 {
+  /* Sized to the copy column so "everything." never runs into the ring */
+  font-size: clamp(38px, 14.4cqw, 84px);
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  margin-bottom: clamp(16px, 2vw, 24px);
+  text-shadow: 0 6px 34px rgba(0, 0, 0, 0.55);
+}
+
+.hero-accent {
+  display: block;
+  padding-right: 0.1em; /* keeps the italic last glyph inside the clipped gradient */
+  background: linear-gradient(90deg, #ffc27a, var(--orange), #ff4d00, #ffc27a);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 22px rgba(255, 122, 26, 0.35));
+  animation: shimmer 9s linear infinite;
+}
+
+.hero .hero-sub {
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.6);
+  margin: 0;
+  max-width: 470px;
+  font-size: clamp(16px, 1.45vw, 21px);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  margin-top: clamp(20px, 3vw, 32px);
+}
+
+.ghost-cta {
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.ghost-cta-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  transition:
+    border-color var(--dur) ease,
+    color var(--dur) ease,
+    box-shadow var(--dur) ease,
+    transform var(--dur) var(--ease-spring);
+}
+
+.ghost-cta:hover .ghost-cta-icon {
+  border-color: var(--orange);
+  color: var(--orange-2);
+  box-shadow: 0 0 18px rgba(255, 122, 26, 0.5);
+  transform: rotate(-12deg);
+}
+
+/* ---------- 3D poster ring ---------- */
+
+.ring-stage {
+  grid-area: ring;
+  position: relative;
+  height: clamp(380px, 40vw, 580px);
+  perspective: 1500px;
+  perspective-origin: 50% 24%;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  --card-w: 200px;
+}
+
+.ring-stage:active {
+  cursor: grabbing;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(-11deg);
+}
+
+.ring-card {
+  position: absolute;
+  left: 50%;
+  top: 41%;
+  width: var(--card-w);
+  aspect-ratio: 3 / 4;
+  margin-left: calc(var(--card-w) / -2);
+  margin-top: calc(var(--card-w) * -0.667);
+  border-radius: 18px;
+  overflow: hidden;
+  color: #fff;
+  /* Back half of the cylinder stays visible; --shade (set per frame) turns it into dark glass */
+  backface-visibility: visible;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 24px 44px -14px rgba(0, 0, 0, 0.85);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+  will-change: transform, opacity;
+  -webkit-user-drag: none;
+}
+
+.ring-card.front {
+  border-color: rgba(255, 176, 100, 0.8);
+  box-shadow:
+    0 0 0 1px rgba(255, 122, 26, 0.5),
+    0 0 42px -4px rgba(255, 122, 26, 0.7),
+    0 30px 60px -20px #000;
+}
+
+.ring-card .poster {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.ring-card-text {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 45% 52px 14px 14px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+}
+
+.ring-card-text strong {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 800;
+  font-size: calc(var(--card-w) * 0.115);
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.ring-card-text small {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.ring-card-play {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  opacity: 0;
+  transition: opacity 0.4s ease, background 0.3s ease;
+}
+
+.ring-card.front .ring-card-play {
+  opacity: 1;
+}
+
+.ring-card.front:hover .ring-card-play {
+  background: var(--orange);
+  border-color: transparent;
+}
+
+/* Shade overlay: back-of-cylinder cards read as dark glass slabs with a warm rim */
+.ring-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--shade, 0);
+  background:
+    linear-gradient(160deg, rgba(255, 140, 50, 0.16), transparent 40%),
+    linear-gradient(180deg, rgba(18, 12, 9, 0.94), rgba(6, 4, 3, 0.98));
+  box-shadow: inset 0 0 0 1px rgba(255, 150, 70, 0.25);
+}
+
+/* ---------- Light-effects platform (bloom, beam, rotating rings, comets) ---------- */
+
+.ring-fx {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 108%;
+  aspect-ratio: 2.4;
+  translate: -50% 0;
+  pointer-events: none;
+  perspective: 900px;
+  perspective-origin: 50% 0%;
+}
+
+/* Large warm bloom haze under everything */
+.fx-bloom {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  width: 120%;
+  aspect-ratio: 2.2;
+  translate: -50% -50%;
+  border-radius: 50%;
+  /* Soft edges come from the gradient itself; no blur filter (cheaper on large areas) */
+  background: radial-gradient(closest-side, rgba(255, 128, 32, 0.5), rgba(255, 96, 16, 0.2) 45%, transparent 80%);
+  animation: fx-breathe 5s ease-in-out infinite;
+}
+
+/* Bright 2D glow ellipse that sits exactly on the tipped plane's outer ring:
+   box-shadows on a 3D-tilted element get squashed, so the bloom is drawn flat here. */
+.ring-fx::before,
+.ring-fx::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72%;
+  aspect-ratio: 3.6;
+  translate: -50% -50%;
+  border-radius: 50%;
+}
+
+.ring-fx::before {
+  border: 2px solid rgba(255, 196, 130, 0.95);
+  box-shadow:
+    0 0 6px 1px rgba(255, 220, 170, 0.9),
+    0 0 22px 4px rgba(255, 140, 40, 0.95),
+    0 0 60px 14px rgba(255, 110, 20, 0.6),
+    inset 0 0 26px 4px rgba(255, 130, 30, 0.7);
+  animation: fx-breathe 4.5s ease-in-out infinite;
+}
+
+/* Hot spot on the near rim, like light pooling toward the viewer */
+.ring-fx::after {
+  width: 40%;
+  aspect-ratio: 6;
+  top: 64%;
+  background: radial-gradient(closest-side, rgba(255, 214, 160, 0.75), rgba(255, 130, 30, 0.35) 50%, transparent);
+  filter: blur(8px);
+}
+
+/* Soft vertical light beam rising from the core */
+.fx-beam {
+  position: absolute;
+  left: 50%;
+  bottom: 42%;
+  width: 34%;
+  height: 210%;
+  translate: -50% 0;
+  background: radial-gradient(50% 100% at 50% 100%, rgba(255, 170, 90, 0.35), rgba(255, 120, 30, 0.08) 55%, transparent 80%);
+  animation: fx-breathe 6s ease-in-out infinite reverse;
+}
+
+/* The disc lies flat: a square plane tipped back so circles read as ellipses */
+.fx-plane {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  transform: rotateX(74deg);
+  transform-style: preserve-3d;
+}
+
+.fx-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.fx-outer {
+  border: 2px solid rgba(255, 170, 80, 0.6);
+  box-shadow:
+    0 0 24px 2px rgba(255, 122, 26, 0.9),
+    inset 0 0 40px rgba(255, 122, 26, 0.55);
+  background: radial-gradient(closest-side, rgba(8, 5, 3, 0.92) 62%, rgba(255, 122, 26, 0.2) 90%, transparent);
+}
+
+/* Rotating tick ring (the "grid" of the platform) */
+.fx-ticks {
+  inset: 9%;
+  background: repeating-conic-gradient(rgba(255, 180, 110, 0.55) 0 1.2deg, transparent 1.2deg 7.5deg);
+  -webkit-mask: radial-gradient(closest-side, transparent 88%, #000 89%, #000 97%, transparent 98%);
+  mask: radial-gradient(closest-side, transparent 88%, #000 89%, #000 97%, transparent 98%);
+  animation: fx-spin 40s linear infinite;
+}
+
+.fx-inner {
+  inset: 26%;
+  border: 1px dashed rgba(255, 186, 120, 0.45);
+  box-shadow: 0 0 18px rgba(255, 122, 26, 0.35);
+  animation: fx-spin 26s linear infinite reverse;
+}
+
+/* Comet light trails orbiting the platform */
+.fx-comet {
+  position: absolute;
+  inset: -3%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 62%, rgba(255, 150, 60, 0.08) 70%, rgba(255, 196, 120, 0.95) 99%, transparent 100%);
+  -webkit-mask: radial-gradient(closest-side, transparent 92%, #000 94%, #000 98%, transparent 100%);
+  mask: radial-gradient(closest-side, transparent 92%, #000 94%, #000 98%, transparent 100%);
+  filter: drop-shadow(0 0 6px rgba(255, 150, 60, 0.9));
+  animation: fx-spin 7s linear infinite;
+}
+
+.fx-c2 {
+  inset: 16%;
+  animation-duration: 11s;
+  animation-direction: reverse;
+  opacity: 0.7;
+}
+
+/* Sparks riding the outer ring */
+.fx-orbit {
+  position: absolute;
+  inset: 0;
+  animation: fx-spin 18s linear infinite;
+}
+
+.fx-orbit i {
+  position: absolute;
+  width: 2.2%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #ffd9a8;
+  box-shadow: 0 0 10px 3px rgba(255, 160, 60, 0.95);
+}
+
+.fx-orbit i:nth-child(1) { left: 49%; top: -1%; }
+.fx-orbit i:nth-child(2) { left: 6%; top: 72%; }
+.fx-orbit i:nth-child(3) { right: 6%; top: 70%; }
+
+.fx-core {
+  position: absolute;
+  inset: 37%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(#2b1a10, #0a0604 70%);
+  border: 1px solid rgba(255, 160, 80, 0.5);
+  box-shadow: 0 0 30px rgba(255, 122, 26, 0.55), inset 0 0 20px rgba(255, 122, 26, 0.35);
+}
+
+/* Counter-tilt the logo so it faces the viewer instead of lying flat */
+.fx-core {
+  transform-style: preserve-3d;
+}
+
+.fx-core .brand-mark {
+  width: 30%;
+  height: 30%;
+  min-width: 18px;
+  min-height: 18px;
+  font-size: 11px;
+  transform: rotateX(-74deg);
+}
+
+/* Horizontal anamorphic flare across the platform */
+.fx-flare {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 110%;
+  height: 3px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: linear-gradient(90deg, transparent, rgba(255, 190, 120, 0.85) 35%, #fff4e0 50%, rgba(255, 190, 120, 0.85) 65%, transparent);
+  filter: blur(1.5px) drop-shadow(0 0 8px rgba(255, 140, 50, 0.9));
+  opacity: 0.75;
+  animation: fx-breathe 4s ease-in-out infinite;
+}
+
+@keyframes fx-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fx-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
+/* Off-screen: freeze all platform animations (class set by HeroRing) */
+.ring-stage.paused .ring-fx *,
+.ring-stage.paused .ring-fx {
+  animation-play-state: paused;
+}
+
+/* ---------- Promo cards ---------- */
+
+.promos {
+  grid-area: promos;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.promo {
+  position: relative;
+  isolation: isolate;
+  text-align: left;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 150px;
+  padding: 18px;
+  border-radius: 22px;
+  color: #fff;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition:
+    transform var(--dur) var(--ease-out),
+    border-color var(--dur) ease,
+    box-shadow var(--dur) ease;
+}
+
+/* Glowing orange edge, brightest at the top-left like the reference cards */
+.promo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, rgba(255, 170, 80, 0.95), rgba(255, 122, 26, 0.35) 35%, rgba(255, 255, 255, 0.06) 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.promo:not(.promo-ad) {
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(255, 122, 26, 0.22), transparent 55%),
+    var(--glass);
+  box-shadow: 0 0 30px -10px rgba(255, 122, 26, 0.45);
+}
+
+.promo:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 122, 26, 0.45);
+  box-shadow: 0 16px 40px -16px rgba(255, 122, 26, 0.6);
+}
+
+.promo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--orange-2);
+  background: rgba(255, 122, 26, 0.14);
+  border: 1px solid rgba(255, 122, 26, 0.32);
+}
+
+.promo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 46px;
+}
+
+.promo-text strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.promo-text small {
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.promo-go {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background var(--dur) ease, transform var(--dur) var(--ease-out), border-color var(--dur) ease;
+}
+
+.promo:hover .promo-go {
+  background: var(--orange);
+  border-color: transparent;
+  transform: translateX(2px);
+}
+
+.promo-ad {
+  justify-content: flex-end;
+  min-height: 170px;
+}
+
+.promo-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 1.2s var(--ease-out);
+}
+
+.promo-ad::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.82));
+}
+
+.promo-ad:hover .promo-bg {
+  transform: scale(1.05);
+}
+
+.promo-tag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Library: chips, grid, side panel ---------- */
+
+.library {
+  scroll-margin-top: calc(var(--nav-height) + 8px);
+  margin-top: clamp(16px, 3vw, 40px);
+}
+
+.library-head {
+  justify-content: center;
+}
+
+/* No solid band behind the chips: they carry their own glass */
+.library-head::before {
+  display: none;
+}
+
+.tabs {
+  justify-content: center;
+}
+
+.tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(16, 11, 8, 0.72);
+  border: 1px solid var(--glass-border);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.tabs button svg {
+  opacity: 0.85;
+}
+
+.tabs button:hover {
+  color: #fff;
+  border-color: rgba(255, 122, 26, 0.35);
+  box-shadow: none;
+}
+
+.tabs button.active {
+  color: #fff;
+  background: var(--orange-grad);
+  border-color: rgba(255, 190, 130, 0.6);
+  box-shadow: var(--orange-glow);
+}
+
+.library-body {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+}
+
+.library-body:has(.cp) {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.library-side:empty {
+  display: none;
+}
+
+.library-side {
+  position: sticky;
+  top: calc(var(--nav-height) + 76px);
+}
+
+.game-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 176px), 1fr));
+  gap: clamp(12px, 1.6vw, 20px);
+}
+
+.game-card {
+  border-radius: 20px;
+  background: rgba(14, 10, 8, 0.72);
+  border: 1px solid var(--glass-border);
+}
+
+.game-card-media {
+  position: relative;
+}
+
+.game-card-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 48% 14px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.82));
+}
+
+.game-card-overlay h3,
+.game-card:hover .game-card-overlay h3 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 800;
+  font-size: clamp(17px, 1.6vw, 22px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.game-chip {
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.game-card-play {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--orange);
+  box-shadow: 0 6px 18px -4px rgba(255, 122, 26, 0.85);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity var(--dur) ease, transform var(--dur) var(--ease-spring);
+}
+
+.game-card:hover .game-card-play,
+.game-card:focus-visible .game-card-play {
+  opacity: 1;
+  transform: none;
+}
+
+.game-card-body {
+  padding: 10px 14px 13px;
+  gap: 2px;
+}
+
+.game-card-body .game-meta {
+  font-size: 10.5px;
+}
+
+.game-best {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.62);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Poster formats */
+.poster {
+  container-type: inline-size;
+}
+
+.poster-portrait {
+  aspect-ratio: 3 / 4;
+}
+
+.poster-portrait .poster-icon {
+  top: 40%;
+  width: 36cqw;
+  height: 36cqw;
+  margin: -18cqw 0 0 -18cqw;
+  border-radius: 11cqw;
+}
+
+.poster-portrait .poster-icon svg {
+  width: 16cqw;
+  height: 16cqw;
+}
+
+.poster-portrait .poster-ring {
+  top: 40%;
+}
+
+.poster-portrait .poster-ring.r1 {
+  height: 74%;
+}
+
+.poster-portrait .poster-ring.r2 {
+  height: 50%;
+}
+
+.poster-portrait .poster-mono {
+  top: -8%;
+  right: -6%;
+  bottom: auto;
+  font-size: 80cqw;
+  color: rgba(255, 255, 255, 0.1);
+}
+
+.poster-thumb {
+  flex: none;
+  width: 64px;
+  aspect-ratio: 16 / 11;
+  border-radius: 11px;
+}
+
+.poster-thumb .poster-icon {
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 9px;
+}
+
+.poster-thumb .poster-mono,
+.poster-thumb .poster-ring {
+  display: none;
+}
+
+/* Glass panel (Continue playing) */
+.panel {
+  padding: 16px;
+  border-radius: 22px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: rise 0.6s var(--ease-out) 0.15s both;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-left: 4px;
+}
+
+.panel-head h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.panel-link {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  transition: background var(--dur-fast) ease, transform var(--dur) var(--ease-out);
+}
+
+.panel-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
+}
+
+.cp-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 14px;
+  color: #fff;
+  transition: background var(--dur-fast) ease;
+}
+
+.cp-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cp-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cp-text strong {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-text small {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cp-play {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--orange-2);
+  border: 1.5px solid var(--orange);
+  transition: background var(--dur) ease, color var(--dur) ease, box-shadow var(--dur) ease;
+}
+
+.cp-row:hover .cp-play {
+  color: #fff;
+  background: var(--orange);
+  box-shadow: 0 0 16px rgba(255, 122, 26, 0.6);
+}
+
+/* ---------- Other surfaces ---------- */
+
+.card,
+.leaderboard {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+}
+
+/* Solid (no blur) behind live games: blur would be re-computed every frame */
+.game-stage {
+  background: rgba(10, 7, 5, 0.94);
+}
+
+.leaderboard-list li.you {
+  background: rgba(255, 122, 26, 0.16);
+}
+
+.signin-hint {
+  background: rgba(255, 122, 26, 0.1);
+  border-color: rgba(255, 122, 26, 0.3);
+}
+
+.play-modes {
+  background: var(--glass);
+  border-color: var(--glass-border);
+}
+
+.announce {
+  background: linear-gradient(90deg, rgba(255, 122, 26, 0.18), var(--glass));
+  border-color: rgba(255, 122, 26, 0.3);
+}
+
+.footer {
+  border-top-color: var(--glass-border);
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 1279px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    grid-template-areas:
+      "copy ring"
+      "promos promos";
+    min-height: 0;
+  }
+
+  .promos {
+    flex-direction: row;
+  }
+
+  .promos > * {
+    flex: 1;
+    min-height: 130px;
+  }
+
+  .library-body:has(.cp) {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+@media (max-width: 1099px) {
+  .nav-links {
+    display: none;
+  }
+}
+
+@media (max-width: 899px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "copy"
+      "ring"
+      "promos";
+    text-align: center;
+    gap: 8px;
+  }
+
+  .hero::before {
+    inset: -10% -10% 50%;
+  }
+
+  .hero-kicker,
+  .hero-actions {
+    justify-content: center;
+  }
+
+  .hero .hero-sub {
+    margin: 0 auto;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 9.4vw, 64px);
+  }
+
+  /* Width capped so card size stays proportional to the stage height on tablets */
+  .ring-stage {
+    width: 100%;
+    max-width: 560px;
+    margin-inline: auto;
+    height: clamp(250px, 66vw, 400px);
+  }
+
+  .library-body:has(.cp) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Continue playing goes above the grid on small screens */
+  .library-side {
+    position: static;
+    order: -1;
+  }
+}
+
+@media (max-width: 740px) {
+  .nav-search {
+    display: none;
+  }
+
+  .library-search {
+    display: flex;
+    width: 100%;
+  }
+
+  .library-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tabs {
+    justify-content: flex-start;
+  }
+
+  .tabs button {
+    padding: 9px 15px;
+    font-size: 13.5px;
+  }
+
+  .game-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .game-card-overlay {
+    padding: 48% 11px 10px;
+  }
+
+  .game-card-body {
+    padding: 8px 11px 11px;
+  }
+
+  /* Touch: play badge always visible */
+  .game-card-play {
+    opacity: 1;
+    transform: none;
+    width: 30px;
+    height: 30px;
+  }
+
+  .game-card-play svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+@media (max-width: 560px) {
+  .promos {
+    flex-direction: column;
+  }
+
+  .promos > * {
+    min-height: 0;
+  }
+
+  .promo {
+    flex-direction: row;
+    align-items: center;
+    padding: 14px;
+  }
+
+  .promo-go {
+    position: static;
+    margin-left: auto;
+    flex: none;
+  }
+
+  .promo-text {
+    padding-right: 0;
+    text-align: left;
+  }
+
+  .promo-ad {
+    min-height: 120px;
+    align-items: flex-end;
+  }
+
+  .hero-actions .primary-btn {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .game-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .game-card-overlay h3 {
+    font-size: 15px;
+  }
+}
+
+@media (hover: none) {
+  .ring-stage {
+    cursor: auto;
+  }
+}
+
+@media (max-width: 899px) {
+  .ring-stage {
+    margin-top: -16px;
+  }
+}

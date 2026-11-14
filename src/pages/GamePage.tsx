@@ -9,6 +9,7 @@ import { useLeaderboard, useSaveScore } from "../lib/scores";
 import { useBestForGame } from "../hooks/useBest";
 import Leaderboard from "../components/Leaderboard";
 import { trackGame } from "../lib/track";
+import { pushRecent } from "../lib/recent";
 
 function GameRunner({ gameId, onScore }: { gameId: string; onScore: (score: number) => void }) {
   const Engine = engines[gameId as keyof typeof engines];
@@ -65,7 +66,10 @@ export default function GamePage() {
   }, []);
 
   useEffect(() => {
-    if (id && getGame(id)) trackGame("game_start", id);
+    if (id && getGame(id)) {
+      trackGame("game_start", id);
+      pushRecent(id);
+    }
   }, [id]);
 
   if (!game) {

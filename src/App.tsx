@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { Route, Routes as RouterRoutes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
 import Nav from "./components/Nav";
-import DotGrid from "./components/DotGrid";
+import Sidebar from "./components/Sidebar";
+import ParallaxBackground from "./components/ParallaxBackground";
 import Home from "./pages/Home";
 import GamePage from "./pages/GamePage";
 import Login from "./pages/Login";
@@ -25,31 +26,9 @@ function Shell() {
 
   return (
     <div className="app">
-      <div className="bg-dots" aria-hidden="true">
-        <DotGrid
-          baseColor="#afff00"
-          activeColor="#ffffff"
-          shape="circle"
-          dotSize={6}
-          gap={15}
-          proximity={150}
-          strength={1.7}
-          bounce={0.3}
-          tension={0.45}
-          returnDuration={0.9}
-          shockRadius={550}
-          shockStrength={9}
-          swell={0.5}
-          stretch={0.35}
-          glow={1.05}
-          fade={0.4}
-          intro
-          mouseInteraction
-          // No click ripples while playing a game — every tap would trigger one.
-          clickShock={!location.pathname.startsWith("/game/")}
-        />
-      </div>
+      <ParallaxBackground />
       <Nav user={auth.user} onSignOut={handleSignOut} />
+      <Sidebar />
       <main className="route" key={location.pathname}>
       <RouterRoutes location={location}>
         <Route path="/" element={<Home />} />

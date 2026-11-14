@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowRight } from "lucide-react";
 import { useLiveAds } from "../lib/ads";
 import { useSiteSettings } from "../lib/siteSettings";
 import { trackAd } from "../lib/track";
 
-/** Sponsored box for the home page. Rotates through the currently eligible ads. */
-export default function AdBox() {
+/**
+ * Sponsored box. Rotates through the currently eligible ads.
+ * `variant="card"` is the compact hero side-card; `fallback` renders when no ad is live.
+ */
+export default function AdBox({
+  variant = "banner",
+  fallback = null,
+}: {
+  variant?: "banner" | "card";
+  fallback?: ReactNode;
+}) {
   const settings = useSiteSettings();
   const ads = useLiveAds();
   const [index, setIndex] = useState(0);
@@ -28,7 +38,30 @@ export default function AdBox() {
     return () => window.clearInterval(id);
   }, [ads.length, settings.ad_rotate_seconds]);
 
-  if (!settings.ads_enabled || !ad) return null;
+  if (!settings.ads_enabled || !ad) return <>{fallback}</>;
+
+  if (variant === "card") {
+    return (
+      <a
+        className="promo promo-ad"
+        href={ad.link_url}
+        target="_blank"
+        rel="noopener noreferrer sponsored"
+        aria-label={`Sponsored: ${ad.title}`}
+        onClick={() => trackAd(ad.id, "click")}
+      >
+        {ad.cover_url ? <img className="promo-bg" src={ad.cover_url} alt="" loading="lazy" decoding="async" /> : null}
+        <span className="promo-tag">Sponsored</span>
+        <span className="promo-text">
+          <strong>{ad.title}</strong>
+          <small>{ad.body || ad.cta_label}</small>
+        </span>
+        <span className="promo-go" aria-hidden="true">
+          <ArrowRight size={16} />
+        </span>
+      </a>
+    );
+  }
 
   return (
     <aside className="ad-box" aria-label="Sponsored">

@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import type { Game } from "../catalog";
 import { scoreLabel } from "../catalog";
 import { GamePoster } from "./GamePoster";
 
 export function GameCard({ game, best, index = 0 }: { game: Game; best: number | null; index?: number }) {
-  // Pointer position drives the spotlight + subtle 3D tilt (see ui.css).
+  // Pointer position drives the spotlight + subtle 3D tilt (see CSS). Mouse only.
   function onMove(e: React.PointerEvent<HTMLAnchorElement>) {
     if (e.pointerType !== "mouse") return;
     const el = e.currentTarget;
@@ -31,21 +31,21 @@ export function GameCard({ game, best, index = 0 }: { game: Game; best: number |
       onPointerLeave={onLeave}
       style={{ "--accent": game.accent, "--i": Math.min(index, 14) } as React.CSSProperties}
     >
-      <GamePoster game={game} />
+      <div className="game-card-media">
+        <GamePoster game={game} size="portrait" />
+        <div className="game-card-overlay">
+          <span className="game-chip">{game.category}</span>
+          <h3>{game.title}</h3>
+        </div>
+        <span className="game-card-play" aria-hidden="true">
+          <Play size={16} fill="currentColor" />
+        </span>
+      </div>
       <div className="game-card-body">
         <p className="game-meta">
-          {game.category} · {game.difficulty} · {game.minutes} min
+          {game.difficulty} · {game.minutes} min
         </p>
-        <h3>{game.title}</h3>
-        <p className="game-desc">{game.description}</p>
-        <div className="game-card-footer">
-          <span>{best !== null ? `${scoreLabel(game)}: ${best}` : scoreLabel(game)}</span>
-          <span className="play-chip">
-            <Play size={14} />
-            Play
-            <ArrowUpRight size={14} className="play-arrow" />
-          </span>
-        </div>
+        <p className="game-best">{best !== null ? `${scoreLabel(game)} ${best}` : scoreLabel(game)}</p>
       </div>
     </Link>
   );

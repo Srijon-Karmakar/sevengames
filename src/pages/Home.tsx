@@ -1,15 +1,39 @@
-import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Search } from "lucide-react";
-import { categories, games, type GameCategory } from "../catalog";
+import { useEffect, useMemo } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowDown, Shuffle } from "lucide-react";
+import { categories, games, getGame, type Game, type GameCategory } from "../catalog";
 import { GameCard } from "../components/GameCard";
-import AdBox from "../components/AdBox";
+import HeroRing from "../components/HeroRing";
+import PromoCards from "../components/PromoCards";
+import ContinuePlaying from "../components/ContinuePlaying";
+import { SearchBox } from "../components/Nav";
 import { useSiteSettings } from "../lib/siteSettings";
+import { useBestForGame } from "../hooks/useBest";
+import { categoryIcon } from "../lib/categoryIcons";
+
+// Posters shown on the hero ring (order = order around the ring).
+const FEATURED = [
+  "infitunnel",
+  "carrom",
+  "yat-c",
+  "merge",
+  "pov-cricket",
+  "serpent",
+  "publicport",
+  "connect-four",
+  "stack",
+  "minefield",
+  "echo",
+  "lights-out",
+];
+const featured = FEATURED.map((id) => getGame(id)).filter((g): g is Game => Boolean(g));
 
 export default function Home() {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const category = (params.get("category") as GameCategory | null) ?? null;
-  const [query, setQuery] = useState("");
+  const query = params.get("q") ?? "";
   const settings = useSiteSettings();
 
   const filtered = useMemo(() => {
@@ -25,29 +49,62 @@ export default function Home() {
     });
   }, [category, query]);
 
+  // "/#games" links (nav, sidebar, promo cards) scroll to the library.
+  useEffect(() => {
+    if (location.hash !== "#games") return;
+    const id = requestAnimationFrame(() =>
+      document.getElementById("games")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [location.key, location.hash]);
+
   function pickCategory(next: GameCategory | "All") {
-    if (next === "All") setParams({});
-    else setParams({ category: next });
+    const p = new URLSearchParams(params);
+    if (next === "All") p.delete("category");
+    else p.set("category", next);
+    setParams(p, { replace: true });
+  }
+
+  function surprise() {
+    const game = games[Math.floor(Math.random() * games.length)];
+    navigate(`/game/${game.id}`);
   }
 
   return (
-    <div className="page">
+    <div className="page home">
       <section className="hero">
-        <div className="hero-glow" aria-hidden="true">
-          <i />
-          <i />
-          <i />
+        <div className="hero-copy">
+          <p className="hero-kicker">
+            Play <i /> Compete <i /> Repeat
+          </p>
+          <h1>
+            Play everything. <span className="hero-accent">Anywhere.</span>
+          </h1>
+          <p className="hero-sub">
+            {games.length} hand-built games, global leaderboards, and progress that follows your account to any
+            device.
+          </p>
+          <div className="hero-actions">
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => document.getElementById("games")?.scrollIntoView({ behavior: "smooth" })}
+            >
+              <ArrowDown size={17} />
+              Explore games
+            </button>
+            <button type="button" className="ghost-cta" onClick={surprise}>
+              <span className="ghost-cta-icon">
+                <Shuffle size={16} />
+              </span>
+              Surprise me
+            </button>
+          </div>
         </div>
-        <p className="eyebrow">One account. Every game.</p>
-        <h1>
-          Play everything.
-          <br />
-          <span className="text-secondary">Anywhere.</span>
-        </h1>
-        <p className="hero-sub">
-          A minimal arcade with {games.length} hand-built games, global leaderboards, and progress
-          that follows your account to any device.
-        </p>
+
+        <HeroRing games={featured} />
+
+        <PromoCards />
       </section>
 
       {settings.announcement_enabled && settings.announcement_text ? (
@@ -56,51 +113,47 @@ export default function Home() {
         </div>
       ) : null}
 
-      <AdBox />
-
       <section className="library" id="games">
         <div className="library-head">
           <div className="tabs" role="tablist" aria-label="Filter by category">
-            {categories.map((item) => (
-              <button
-                key={item}
-                type="button"
-                role="tab"
-                aria-selected={(item === "All" && !category) || item === category}
-                className={((item === "All" && !category) || item === category) ? "active" : ""}
-                onClick={() => pickCategory(item)}
-              >
-                {item}
-              </button>
-            ))}
+            {categories.map((item) => {
+              const Icon = categoryIcon[item];
+              const active = (item === "All" && !category) || item === category;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={active ? "active" : ""}
+                  onClick={() => pickCategory(item)}
+                >
+                  <Icon size={15} />
+                  {item === "All" ? "All games" : item}
+                </button>
+              );
+            })}
           </div>
-          <label className="search-box">
-            <Search size={16} />
-            <input
-              type="search"
-              placeholder="Search games"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+          <SearchBox className="library-search" />
         </div>
 
-        <div className="game-grid">
-          {filtered.map((game, i) => (
-            <HomeCardWithBest key={game.id} game={game} index={i} />
-          ))}
+        <div className="library-body">
+          <div className="library-main">
+            <div className="game-grid">
+              {filtered.map((game, i) => (
+                <HomeCardWithBest key={game.id} game={game} index={i} />
+              ))}
+            </div>
+            {filtered.length === 0 ? <p className="empty-note">No games match “{query}”.</p> : null}
+          </div>
+          <aside className="library-side">
+            <ContinuePlaying />
+          </aside>
         </div>
-
-        {filtered.length === 0 ? (
-          <p className="empty-note">No games match “{query}”.</p>
-        ) : null}
       </section>
     </div>
   );
 }
-
-import { useBestForGame } from "../hooks/useBest";
-import type { Game } from "../catalog";
 
 function HomeCardWithBest({ game, index }: { game: Game; index: number }) {
   const best = useBestForGame(game.id);
