@@ -15,7 +15,7 @@ export default function Login() {
 
   return (
     <div className="page narrow login-page">
-      <p className="eyebrow">7games account</p>
+      <p className="eyebrow">Senevon account</p>
       <h1>Sign in once. Play everywhere.</h1>
       <p className="hero-sub">
         Your scores and leaderboard ranks follow your account to every device.

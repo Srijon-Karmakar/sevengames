@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Play } from "lucide-react";
 import type { Game } from "../catalog";
 import { GamePoster } from "./GamePoster";
+import { RiPlayFill } from "./ReIcons";
 
-const SPEED = 7; // degrees per second of auto-rotation
+const SPEED = 0; // Stays on front card by default; drag to spin
 const DRAG = 0.28; // degrees per pixel dragged
 
 /**
@@ -59,10 +59,10 @@ export default function HeroRing({ games }: { games: Game[] }) {
         const scale = 0.86 + 0.14 * pop;
         const lift = cardW * 0.8 * pop;
         card.style.transform = `rotateY(${theta.toFixed(2)}deg) translateZ(${(radius + lift).toFixed(1)}px) scale(${scale.toFixed(3)})`;
-        // The far half of the cylinder stays visible as dark glass slabs (like the reference).
-        const shade = c >= 0.2 ? 0 : Math.min(1, (0.2 - c) / 0.45);
-        card.style.setProperty("--shade", (shade * 0.9).toFixed(3));
-        card.style.opacity = c >= 0 ? "1" : (0.75 + 0.35 * c).toFixed(3);
+        // Cards in the back fade out cleanly so there is no black overlap over the sky
+        const opacity = c >= 0.05 ? 1 : Math.max(0, (c + 0.12) / 0.18);
+        card.style.opacity = opacity.toFixed(3);
+        card.style.visibility = opacity <= 0.02 ? "hidden" : "visible";
         card.style.pointerEvents = c > 0.35 ? "auto" : "none";
         card.tabIndex = c > 0.35 ? 0 : -1;
         if (c > best) {
@@ -184,6 +184,7 @@ export default function HeroRing({ games }: { games: Game[] }) {
       <div className="ring-fx" aria-hidden="true">
         <span className="fx-bloom" />
         <span className="fx-beam" />
+        <span className="fx-beams-fan" />
         <div className="fx-plane">
           <span className="fx-ring fx-outer" />
           <span className="fx-ring fx-ticks" />
@@ -195,35 +196,56 @@ export default function HeroRing({ games }: { games: Game[] }) {
             <i />
             <i />
           </span>
-          <span className="fx-core">
-            <span className="brand-mark">7</span>
+          <span className="fx-core saucer-emblem">
+            <img src="/logo/mark-256.webp" width={256} height={256} alt="" className="saucer-mark" decoding="async" />
           </span>
         </div>
         <span className="fx-flare" />
       </div>
       <div className="ring">
-        {games.map((game, i) => (
-          <Link
-            key={game.id}
-            to={`/game/${game.id}`}
-            className="ring-card"
-            ref={(el) => {
-              cardRefs.current[i] = el;
-            }}
-            draggable={false}
-            aria-label={`Play ${game.title}`}
-            style={{ "--accent": game.accent } as React.CSSProperties}
-          >
-            <GamePoster game={game} size="portrait" />
-            <span className="ring-card-text">
-              <strong>{game.title}</strong>
-              <small>{game.category}</small>
-            </span>
-            <span className="ring-card-play" aria-hidden="true">
-              <Play size={16} fill="currentColor" />
-            </span>
-          </Link>
-        ))}
+        {games.map((game, i) => {
+          const categoryTag =
+            game.id === "skyrealm"
+              ? "OPEN WORLD RPG"
+              : game.id === "drift-nexus"
+              ? "DRIFT RACING"
+              : game.id === "pixel-craft"
+              ? "VOXEL SANDBOX"
+              : game.id === "shadow-tactics"
+              ? "TACTICAL STEALTH"
+              : game.id === "void-arena"
+              ? "SCI-FI ARENA"
+              : game.category.toUpperCase();
+
+          return (
+            <Link
+              key={game.id}
+              to={`/game/${game.id}`}
+              className="ring-card"
+              ref={(el) => {
+                cardRefs.current[i] = el;
+              }}
+              draggable={false}
+              aria-label={`Play ${game.title}`}
+              style={{ "--accent": game.accent } as React.CSSProperties}
+            >
+              <GamePoster game={game} size="portrait" hideBadge />
+              {/* Light ray effects overlay */}
+              <div className="card-light-rays" aria-hidden="true">
+                <span className="light-ray-diagonal" />
+                <span className="light-ray-flare" />
+                <span className="light-ray-underglow" />
+              </div>
+              <span className="ring-card-text">
+                <strong>{game.title}</strong>
+                <small>{categoryTag}</small>
+              </span>
+              <span className="ring-card-play" aria-hidden="true">
+                <RiPlayFill size={15} />
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

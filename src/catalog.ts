@@ -4,7 +4,12 @@ export type GameCategory =
   | "Action"
   | "Words"
   | "Numbers"
-  | "Classic";
+  | "Classic"
+  | "Adventure"
+  | "RPG"
+  | "Racing"
+  | "Sports"
+  | "Indie";
 
 export type GameEngine =
   | "tictactoe"
@@ -45,15 +50,80 @@ export type Game = {
 
 export const categories: Array<GameCategory | "All"> = [
   "All",
-  "Strategy",
-  "Puzzle",
   "Action",
+  "Adventure",
+  "RPG",
+  "Racing",
+  "Strategy",
+  "Sports",
+  "Indie",
+  "Puzzle",
+  "Classic",
   "Words",
   "Numbers",
-  "Classic",
 ];
 
 export const games: Game[] = [
+  {
+    id: "skyrealm",
+    title: "Skyrealm",
+    category: "RPG",
+    kind: "iframe",
+    embedUrl: "https://infitunnel.onrender.com",
+    difficulty: "Medium",
+    minutes: 15,
+    accent: "#ff7a1a",
+    poster: "/images/orbit/card_skyrealm.png",
+    description: "Venture across vast floating islands, uncover ancient sky ruins, and master celestial arts in this open world RPG.",
+  },
+  {
+    id: "drift-nexus",
+    title: "Drift Nexus",
+    category: "Racing",
+    kind: "builtin",
+    engine: "reflex",
+    difficulty: "Hard",
+    minutes: 5,
+    accent: "#ff3b30",
+    poster: "/images/orbit/card_drift_nexus.png",
+    description: "High-octane midnight drift racing. Tune your engine, slide through apexes, and dominate the city tarmac.",
+  },
+  {
+    id: "pixel-craft",
+    title: "Pixel Craft",
+    category: "Adventure",
+    kind: "builtin",
+    engine: "stack",
+    difficulty: "Medium",
+    minutes: 10,
+    accent: "#30d158",
+    poster: "/images/orbit/card_pixel_craft.png",
+    description: "Mine, craft, and survive in an infinite procedural block-based voxel universe filled with exploration.",
+  },
+  {
+    id: "shadow-tactics",
+    title: "Shadow Tactics",
+    category: "Strategy",
+    kind: "builtin",
+    engine: "carrom",
+    difficulty: "Hard",
+    minutes: 12,
+    accent: "#af52de",
+    poster: "/images/orbit/card_shadow_tactics.png",
+    description: "Master feudal stealth, outwit patrolling guards from the dark shadows, and execute flawless ninja strikes.",
+  },
+  {
+    id: "void-arena",
+    title: "Void Arena",
+    category: "Action",
+    kind: "builtin",
+    engine: "dodge",
+    difficulty: "Hard",
+    minutes: 8,
+    accent: "#0a84ff",
+    poster: "/images/orbit/card_void_arena.png",
+    description: "Fast-paced zero-G combat arena. Outplay rival cyber-gladiators with high-tech laser weaponry.",
+  },
   {
     id: "yat-c",
     title: "YAT-C",

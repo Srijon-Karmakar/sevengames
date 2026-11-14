@@ -40,7 +40,17 @@ function Shell() {
       </RouterRoutes>
       </main>
       <footer className="footer">
-        <p>7games — one account, every game.</p>
+        <img
+          className="footer-logo"
+          src="/logo/logo-h-light-nav.webp"
+          width={432}
+          height={120}
+          alt="Senevon Game Studio"
+          loading="lazy"
+          decoding="async"
+        />
+        <p>Play instantly, discover new worlds, and be part of a global gaming universe.</p>
+        <p className="footer-copy">© {new Date().getFullYear()} Senevon Game Studio</p>
       </footer>
     </div>
   );

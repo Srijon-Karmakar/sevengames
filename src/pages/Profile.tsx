@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { useAuthContext } from "../context/AuthContext";
-import { Avatar } from "../lib/auth";
+import { useAvatar } from "../lib/avatar";
+import AvatarLibrary from "../components/AvatarLibrary";
 import { games, scoreLabel } from "../catalog";
 import { isLowerBetter, usePersonalScores } from "../lib/scores";
 
@@ -12,6 +13,17 @@ export default function Profile() {
   const navigate = useNavigate();
   const { scores } = usePersonalScores(user);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const { uri: avatarUri } = useAvatar(user);
+  const location = useLocation();
+
+  // "/profile#avatars" (from the nav avatar menu) jumps straight to the library.
+  useEffect(() => {
+    if (location.hash !== "#avatars") return;
+    const id = requestAnimationFrame(() =>
+      document.getElementById("avatars")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [location.hash, location.key]);
 
   useEffect(() => {
     if (!user) {
@@ -43,7 +55,13 @@ export default function Profile() {
   return (
     <div className="page narrow profile-page">
       <div className="profile-head card">
-        <Avatar user={user} />
+        <a href="#avatars" className="profile-avatar" aria-label="Change avatar">
+          {avatarUri ? (
+            <img className="avatar" src={avatarUri} alt="" width={128} height={128} />
+          ) : (
+            <span className="avatar avatar-initial">{(displayName ?? "?").charAt(0).toUpperCase()}</span>
+          )}
+        </a>
         <div>
           <p className="eyebrow">Global account</p>
           <h1>{displayName}</h1>
@@ -76,6 +94,12 @@ export default function Profile() {
           <span>Latest game</span>
         </div>
       </div>
+
+      <section className="profile-avatars card" id="avatars">
+        <h2>Avatar library</h2>
+        <p className="text-secondary">Pick a style, then a character. Shuffle for more. It follows your account to every device.</p>
+        <AvatarLibrary user={user} />
+      </section>
 
       <section className="profile-scores">
         <h2>Your bests</h2>

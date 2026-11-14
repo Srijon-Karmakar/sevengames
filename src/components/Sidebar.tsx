@@ -1,39 +1,64 @@
 import { Link, useLocation } from "react-router-dom";
-import { Crown, Gamepad2, House, Puzzle, Trophy, Zap, type LucideIcon } from "lucide-react";
+import {
+  RiBook2Line,
+  RiFlashlightLine,
+  RiGamepadLine,
+  RiGroupLine,
+  RiHomeFill,
+  RiSettings4Line,
+  RiTrophyLine,
+} from "./ReIcons";
 
-type Item = { to: string; label: string; icon: LucideIcon; match: (path: string, search: URLSearchParams, hash: string) => boolean };
+type RailItem = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  match: (path: string, search: URLSearchParams, hash: string) => boolean;
+};
 
-const items: Item[] = [
-  { to: "/", label: "Home", icon: House, match: (p, s, h) => p === "/" && !s.get("category") && h !== "#games" },
-  { to: "/#games", label: "Library", icon: Gamepad2, match: (p, s, h) => p === "/" && !s.get("category") && h === "#games" },
-  { to: "/?category=Action#games", label: "Action", icon: Zap, match: (_p, s) => s.get("category") === "Action" },
-  { to: "/?category=Puzzle#games", label: "Puzzle", icon: Puzzle, match: (_p, s) => s.get("category") === "Puzzle" },
-  { to: "/?category=Strategy#games", label: "Strategy", icon: Crown, match: (_p, s) => s.get("category") === "Strategy" },
-  { to: "/profile", label: "Your stats", icon: Trophy, match: (p) => p === "/profile" || p === "/login" },
+const items: RailItem[] = [
+  { to: "/", label: "Home", icon: RiHomeFill, match: (p, _s, h) => p === "/" && (!h || h === "#top") },
+  { to: "/#console", label: "Play", icon: RiGamepadLine, match: (_p, _s, h) => h === "#console" },
+  { to: "/#instant", label: "Instant Play", icon: RiFlashlightLine, match: (_p, _s, h) => h === "#instant" },
+  { to: "/#community", label: "Community", icon: RiGroupLine, match: (_p, _s, h) => h === "#community" || h === "#friends-panel" },
+  { to: "/#games", label: "Library", icon: RiBook2Line, match: (_p, s, h) => h === "#games" || Boolean(s.get("category")) },
+  { to: "/profile", label: "Trophy", icon: RiTrophyLine, match: (p) => p === "/profile" },
+  { to: "/#settings", label: "Settings", icon: RiSettings4Line, match: (_p, _s, h) => h === "#settings" },
 ];
 
-/** Icon rail on desktop; the same items become a bottom tab bar on phones/tablets (CSS). */
+/** Dynamic floating glassmorphism sidebar dock with animated blooming border */
 export default function Sidebar() {
   const { pathname, search, hash } = useLocation();
   const params = new URLSearchParams(search);
 
   return (
-    <nav className="rail" aria-label="Main">
-      {items.map(({ to, label, icon: Icon, match }) => {
-        const active = match(pathname, params, hash);
-        return (
-          <Link
-            key={label}
-            to={to}
-            className={`rail-item${active ? " active" : ""}`}
-            aria-current={active ? "page" : undefined}
-            data-label={label}
-          >
-            <Icon size={20} strokeWidth={2} />
-            <span className="rail-label">{label}</span>
-          </Link>
-        );
-      })}
+    <nav className="rail" aria-label="Main Navigation">
+      <div className="rail-dock">
+        <div className="rail-glow-bloom" aria-hidden="true" />
+        {items.map(({ to, label, icon: Icon, match }) => {
+          const active = match(pathname, params, hash);
+          return (
+            <Link
+              key={label}
+              to={to}
+              className={`rail-item${active ? " active" : ""}`}
+              aria-current={active ? "page" : undefined}
+              data-label={label}
+              onClick={() => {
+                if (to.includes("#")) {
+                  const targetId = to.split("#")[1];
+                  document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth" });
+                }
+              }}
+            >
+              <span className="rail-icon-box">
+                <Icon size={21} className="rail-svg-icon" />
+              </span>
+              <span className="rail-label">{label}</span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

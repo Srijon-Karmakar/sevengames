@@ -1,12 +1,34 @@
-import { Crown, Hash, Joystick, LayoutGrid, Puzzle, Type, Zap, type LucideIcon } from "lucide-react";
+import {
+  Car,
+  Crown,
+  Flame,
+  Gamepad2,
+  Hash,
+  Joystick,
+  LayoutGrid,
+  Mountain,
+  Puzzle,
+  Sparkles,
+  Swords,
+  Trophy,
+  Type,
+  Wand2,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import type { GameCategory } from "../catalog";
 
 export const categoryIcon: Record<GameCategory | "All", LucideIcon> = {
   All: LayoutGrid,
+  Action: Swords,
+  Adventure: Mountain,
+  RPG: Wand2,
+  Racing: Car,
   Strategy: Crown,
+  Sports: Trophy,
+  Indie: Sparkles,
   Puzzle: Puzzle,
-  Action: Zap,
+  Classic: Joystick,
   Words: Type,
   Numbers: Hash,
-  Classic: Joystick,
 };

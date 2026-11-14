@@ -69,7 +69,15 @@ export function posterIcon(game: Game): LucideIcon {
  */
 export type PosterSize = "card" | "portrait" | "hero" | "thumb";
 
-export function GamePoster({ game, size = "card" }: { game: Game; size?: PosterSize }) {
+export function GamePoster({
+  game,
+  size = "card",
+  hideBadge = false,
+}: {
+  game: Game;
+  size?: PosterSize;
+  hideBadge?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
   const Icon = posterIcon(game);
   const hasImage = Boolean(game.poster) && !failed;
@@ -89,7 +97,9 @@ export function GamePoster({ game, size = "card" }: { game: Game; size?: PosterS
           </span>
         </>
       )}
-      {game.kind === "iframe" && size !== "thumb" ? <span className="poster-badge">Web</span> : null}
+      {game.kind === "iframe" && size !== "thumb" && !hideBadge ? (
+        <span className="poster-badge">Web</span>
+      ) : null}
     </div>
   );
 }

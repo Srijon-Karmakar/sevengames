@@ -105,7 +105,7 @@ function LoginGate({ onDone }: { onDone: () => void }) {
   return (
     <div className="adm-login">
       <form className="card adm-login-card" onSubmit={(e) => void submit(e)}>
-        <span className="brand-mark">7</span>
+        <img className="brand-mark-img" src="/logo/mark-256.webp" width={256} height={256} alt="Senevon" />
         <h1>Admin</h1>
         <p className="hero-sub">Enter the admin password.</p>
         <input
@@ -360,7 +360,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       <header className="adm-bar">
         <div className="adm-bar-in">
           <Link to="/" className="brand">
-            <span className="brand-mark">7</span>
+            <img className="brand-mark-img" src="/logo/mark-256.webp" width={256} height={256} alt="Senevon" />
             Admin
           </Link>
           <nav className="adm-tabs">
