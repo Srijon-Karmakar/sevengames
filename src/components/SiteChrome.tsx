@@ -36,11 +36,11 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
             <img className="site-logo-light" src="/logo/logo-h-light-nav.webp" width={432} height={120} alt="" aria-hidden="true" />
           </Link>
           <div className="h3-menu">
-            <Link to="/#games">
+            <Link to="/games">
               Games
               <i className="h3-chev" />
             </Link>
-            <Link to="/?category=Action#games">
+            <Link to="/games">
               Categories
               <i className="h3-chev" />
             </Link>
@@ -82,7 +82,7 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
             return (
               <Link
                 key={c}
-                to={c === "All" ? "/#games" : `/?category=${encodeURIComponent(c)}#games`}
+                to="/games"
                 className="h3-rail-item"
                 data-label={c === "All" ? "All games" : c}
               >

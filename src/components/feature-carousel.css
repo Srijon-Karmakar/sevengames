@@ -1,0 +1,399 @@
+/* ============================================================
+   Featured games carousel: solid colour per game, circular
+   colour reveal from the centre, round "vinyl" posters.
+   ============================================================ */
+
+/* Registered so the text / accent colours can animate in step with the colour circle */
+@property --fc-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #ffffff;
+}
+
+@property --fc-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fc6e1b;
+}
+
+.fc {
+  /* One timing for everything that changes with a slide: circle, colours, title, posters */
+  /* Quick start, soft landing: the change begins the moment you press */
+  --fc-dur: 0.7s;
+  --fc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  padding: clamp(96px, 13vh, 130px) clamp(20px, 5vw, 72px) clamp(28px, 5vh, 48px);
+  background: var(--fc-base);
+  color: var(--fc-ink);
+  transition:
+    --fc-ink var(--fc-dur) var(--fc-ease),
+    --fc-accent var(--fc-dur) var(--fc-ease);
+  font-family: var(--h3-sans, "Inter Tight", sans-serif);
+}
+
+/* The new colour grows as a circle from the centre of the middle poster, behind everything
+   else, to a radius that reaches the farthest corner (both measured in JS) */
+.fc-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  clip-path: circle(0px at var(--fc-x, 50%) var(--fc-y, 50%));
+  animation: fc-reveal var(--fc-dur) var(--fc-ease) forwards;
+}
+
+@keyframes fc-reveal {
+  to {
+    clip-path: circle(var(--fc-r, 150vmax) at var(--fc-x, 50%) var(--fc-y, 50%));
+  }
+}
+
+/* ---------- Title + description ---------- */
+.fc-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  gap: 24px 48px;
+  align-items: start;
+  /* New title / description fade in with the circle (no slide) */
+  animation: fc-text var(--fc-dur) var(--fc-ease) both;
+}
+
+@keyframes fc-text {
+  from {
+    opacity: 0;
+  }
+}
+
+.fc-title {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 104px);
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.fc-desc {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  opacity: 0.82;
+}
+
+/* ---------- Poster stage ---------- */
+.fc-stage {
+  position: relative;
+  min-height: clamp(260px, 46vh, 520px);
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.fc-disc {
+  --size: clamp(220px, 34vw, 440px);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--size);
+  aspect-ratio: 1;
+  margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #0b0b0b;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 3px rgba(0, 0, 0, 0.75),
+    0 30px 60px -22px rgba(0, 0, 0, 0.55);
+  transition:
+    transform var(--fc-dur) var(--fc-ease),
+    opacity var(--fc-dur) var(--fc-ease),
+    filter 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Discs roll like real records: the rotation matches the distance travelled (distance / radius),
+   so moving right turns clockwise and moving left anticlockwise. */
+.fc-disc.is-center {
+  transform: translateX(0) scale(1) rotate(0deg);
+  z-index: 2;
+}
+
+.fc-disc.is-left {
+  transform: translateX(calc(-1 * clamp(240px, 36vw, 560px))) scale(0.62) rotate(-121deg);
+  z-index: 1;
+}
+
+.fc-disc.is-right {
+  transform: translateX(clamp(240px, 36vw, 560px)) scale(0.62) rotate(121deg);
+  z-index: 1;
+}
+
+/* Off-stage discs wait fully past the screen edge (clipped by the section), at side-disc size,
+   so leaving and arriving discs keep rolling in and out of view instead of fading. The extra
+   rotation matches the extra distance (≈ 50vw / 10.5vw radius ≈ 270°). */
+.fc-disc.is-far-left {
+  transform: translateX(-86vw) scale(0.62) rotate(-391deg);
+  pointer-events: none;
+}
+
+.fc-disc.is-far-right {
+  transform: translateX(86vw) scale(0.62) rotate(391deg);
+  pointer-events: none;
+}
+
+/* The disc that wraps from one hidden side to the other jumps (never streaks across) */
+.fc-disc.is-jump {
+  transition: none;
+}
+
+.fc-disc.is-left:hover,
+.fc-disc.is-right:hover {
+  filter: brightness(1.08);
+}
+
+.fc-disc:focus-visible {
+  outline: 3px solid var(--fc-ink);
+  outline-offset: 6px;
+}
+
+.fc-art,
+.fc-grooves {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.fc-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fc-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 30%;
+  color: #fff;
+}
+
+/* Vinyl grooves + sheen over the poster */
+.fc-grooves {
+  background:
+    repeating-radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 0 5px, rgba(0, 0, 0, 0.07) 5px 6px),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 40%, rgba(0, 0, 0, 0.25));
+  box-shadow: inset 0 0 0 10px rgba(0, 0, 0, 0.55);
+}
+
+/* Centre label */
+.fc-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  gap: 3px;
+  padding: 6%;
+  text-align: center;
+  background: radial-gradient(circle, #1a1a1a 0 8%, #0d0d0d 9%);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-family: var(--h3-mono, ui-monospace, monospace);
+  line-height: 1.25;
+}
+
+.fc-label b {
+  font-size: clamp(7px, 0.85vw, 11px);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fc-accent);
+}
+
+.fc-label i {
+  font-style: normal;
+  font-size: clamp(6px, 0.7vw, 9px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* ---------- Controls ---------- */
+.fc-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.fc-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  color: var(--fc-ink);
+  background: color-mix(in srgb, var(--fc-ink) 14%, transparent);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.fc-btn:hover {
+  background: color-mix(in srgb, var(--fc-ink) 24%, transparent);
+}
+
+.fc-btn:active {
+  transform: scale(0.92);
+}
+
+.fc .fc-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--fc-accent);
+  background: var(--fc-ink);
+  transition: transform 0.2s ease;
+}
+
+.fc .fc-play:hover {
+  transform: translateY(-2px);
+}
+
+.fc-count {
+  margin: 14px 0 0;
+  text-align: center;
+  font-family: var(--h3-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  opacity: 0.7;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 820px) {
+  .fc {
+    padding: 92px 18px 112px; /* clear the bottom bar */
+  }
+
+  .fc-head {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .fc-title {
+    font-size: clamp(34px, 11vw, 56px);
+  }
+
+  .fc-desc {
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .fc-stage {
+    min-height: 74vw;
+  }
+
+  .fc-disc {
+    --size: 64vw;
+  }
+
+  /* Side posters peek in from the edges */
+  .fc-disc.is-left {
+    transform: translateX(-56vw) scale(0.55) rotate(-100deg);
+  }
+
+  .fc-disc.is-right {
+    transform: translateX(56vw) scale(0.55) rotate(100deg);
+  }
+
+  .fc-disc.is-far-left {
+    transform: translateX(-112vw) scale(0.55) rotate(-283deg);
+  }
+
+  .fc-disc.is-far-right {
+    transform: translateX(112vw) scale(0.55) rotate(283deg);
+  }
+
+  .fc-label b {
+    font-size: 8px;
+  }
+
+  .fc-label i {
+    font-size: 6.5px;
+  }
+
+  .fc-play {
+    padding: 0 16px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fc-reveal {
+    animation-duration: 0.01s;
+  }
+
+  .fc-disc {
+    transition-duration: 0.01s;
+  }
+
+  .fc-head {
+    animation: none;
+  }
+}
+
+/* ---------- Pinned on /home3: fixed final screen that fades in at the end of the dive ---------- */
+.h3-fcwrap {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.h3-fcwrap[data-inactive] {
+  pointer-events: none;
+}
+
+.h3-fcwrap .fc {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Scroll room for the dive (the hero is one screen; the dive finishes ~1 screen down) */
+.h3-dive-space {
+  height: 100vh;
+}
+
+.h3-fc-space {
+  height: 100vh;
+}
+
+/* Footer slides up over the pinned carousel at the very end of the home page */
+.h3-vhero > .h3-studio {
+  z-index: 6;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.45);
+}

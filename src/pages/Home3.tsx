@@ -5,6 +5,8 @@ import { categories, games, scoreLabel, type Game, type GameCategory } from "../
 import { categoryIcon } from "../lib/categoryIcons";
 import { useBestForGame } from "../hooks/useBest";
 import NavAccount from "../components/NavAccount";
+import FeatureCarousel from "../components/FeatureCarousel";
+import "../components/feature-carousel.css";
 import "./home3.css";
 
 /*
@@ -14,6 +16,8 @@ import "./home3.css";
 
 // Only categories that actually have games, in catalog order.
 const usedCategories = categories.filter((c) => c === "All" || games.some((g) => g.category === c));
+// Featured carousel on /home3: the games that have poster art.
+const featuredGames = games.filter((g) => g.poster);
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -107,9 +111,72 @@ function GlassCard({ game, index }: { game: Game; index: number }) {
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
-export default function Home3() {
+// /home3 test page: looping dusk video behind the hero, then a scroll-scrubbed "dive" into the
+// laptop screen that ends on solid orange behind the game library.
+const HERO_VIDEO = "/images/home3/hero-bg.mp4"; // 1920×1080 H.264, 8 s, no audio, loops seamlessly
+const HERO_POSTER = "/images/home3/hero-bg-poster.webp"; // its first frame, shown while it loads
+// 1280×720, 8 s, every frame a keyframe so scroll-seeking is instant. Its first frame matches the
+// hero loop's, and it ends on flat orange (#fc6e1b).
+const DIVE_VIDEO = "/images/home3/dive.mp4";
+
+/** `videoHero` (the /home3 test page) adds the video hero and the scroll dive. */
+export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLElement>(null);
+  const loopRef = useRef<HTMLVideoElement>(null);
+  const diveRef = useRef<HTMLVideoElement>(null);
+  const shadeRef = useRef<HTMLDivElement>(null);
+  const fcRef = useRef<HTMLDivElement>(null);
+  // Text colour of the current carousel slide (white or near-black), used by the transparent nav.
+  const [navInk, setNavInk] = useState("#ffffff");
+
+  // Scroll dive: over the first hero-height of scrolling the hero loop hands over to the dive
+  // video, which scrubs with the scroll position (eased, so it glides) until it reaches orange.
+  useEffect(() => {
+    if (!videoHero) return;
+    const loop = loopRef.current!;
+    const dive = diveRef.current!;
+    const shade = shadeRef.current!;
+    let raf = 0;
+    let cur = 0;
+    let lastSet = -1;
+    const frame = () => {
+      raf = requestAnimationFrame(frame);
+      const heroH = heroRef.current?.offsetHeight ?? window.innerHeight;
+      const target = clamp(window.scrollY / (heroH * 0.95));
+      cur += (target - cur) * 0.18;
+      if (Math.abs(target - cur) < 0.0005) cur = target;
+
+      // Hand-over: the loop fades out over the first few % of the dive (same opening shot).
+      const handOver = clamp(cur / 0.06);
+      loop.style.opacity = `${1 - handOver}`;
+      if (handOver >= 1 && !loop.paused) loop.pause();
+      else if (handOver < 1 && loop.paused) void loop.play().catch(() => {});
+      // The sky shade behind the hero text fades as the camera dives in.
+      shade.style.opacity = `${1 - clamp(cur / 0.35)}`;
+      // The pinned carousel fades in as the dive lands on orange (its colour matches the last frame).
+      const fc = fcRef.current;
+      if (fc) {
+        const show = clamp((cur - 0.82) / 0.16);
+        fc.style.opacity = `${show}`;
+        fc.style.visibility = show > 0 ? "visible" : "hidden";
+        if (show > 0.9) fc.removeAttribute("data-inactive");
+        else fc.setAttribute("data-inactive", "");
+        // Nav text follows the carousel's text colour once it's on screen
+        rootRef.current?.classList.toggle("h3-at-fc", show > 0.5);
+      }
+
+      if (dive.readyState >= 1 && dive.duration) {
+        const t = cur * (dive.duration - 0.05);
+        if (Math.abs(t - lastSet) > 1 / 60 && !dive.seeking) {
+          dive.currentTime = t;
+          lastSet = t;
+        }
+      }
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [videoHero]);
   const location = useLocation();
   // Links from the rest of the site use "/?category=X#games", "/#games" and "/#studio".
   const urlCategory = new URLSearchParams(location.search).get("category");
@@ -164,62 +231,95 @@ export default function Home3() {
   }, []);
 
   return (
-    <div className="h3 h3-min" ref={rootRef}>
+    <div
+      className={`h3 h3-min${videoHero ? " h3-vhero" : ""}${navInk !== "#ffffff" ? " h3-fc-dark" : ""}`}
+      ref={rootRef}
+      style={{ "--h3-fc-ink": navInk } as React.CSSProperties}
+    >
+      {videoHero ? (
+        // Fixed background behind the whole page: the hero loop on top, the dive underneath.
+        <div className="h3-bgfx" aria-hidden="true">
+          <video ref={diveRef} className="h3-bg-dive" src={DIVE_VIDEO} poster={HERO_POSTER} muted playsInline preload="auto" />
+          <video ref={loopRef} className="h3-bg-loop" src={HERO_VIDEO} poster={HERO_POSTER} autoPlay muted loop playsInline preload="auto" />
+          <div ref={shadeRef} className="h3-bg-shade" />
+        </div>
+      ) : null}
+
       <nav className="h3-nav">
         <Link className="h3-logo" to="/" aria-label="Senevon Game Studio — home">
-          <img src="/logo/logo-h-dark-nav.webp" width={432} height={120} alt="Senevon Game Studio" />
+          <img className="h3-logo-dark" src="/logo/logo-h-dark-nav.webp" width={432} height={120} alt="Senevon Game Studio" />
+          {videoHero ? (
+            // White-text logo while the nav sits over the dark video (swapped by CSS)
+            <img className="h3-logo-light" src="/logo/logo-h-light-nav.webp" width={432} height={120} alt="" aria-hidden="true" />
+          ) : null}
         </Link>
-        <div className="h3-menu">
-          <a href="#h3-library">
-            Games
-            <i className="h3-chev" />
-          </a>
-          <a href="#h3-library" onClick={() => setCategory("Action")}>
-            Categories
-            <i className="h3-chev" />
-          </a>
-          <Link to="/profile">
-            Leaderboards
-            <i className="h3-chev" />
-          </Link>
-          <a href="#studio">
-            Studio
-            <i className="h3-chev" />
-          </a>
-        </div>
-        <NavAccount />
+        {videoHero ? (
+          // /home3: just "All games" (opens the game globe), on the right beside the account button
+          <div className="h3-nav-end">
+            <div className="h3-menu h3-menu-end">
+              <Link to="/games">All games</Link>
+            </div>
+            <NavAccount />
+          </div>
+        ) : (
+          <>
+            <div className="h3-menu">
+              <a href="#h3-library">
+                Games
+                <i className="h3-chev" />
+              </a>
+              <a href="#h3-library" onClick={() => setCategory("Action")}>
+                Categories
+                <i className="h3-chev" />
+              </a>
+              <Link to="/profile">
+                Leaderboards
+                <i className="h3-chev" />
+              </Link>
+              <a href="#studio">
+                Studio
+                <i className="h3-chev" />
+              </a>
+            </div>
+            <NavAccount />
+          </>
+        )}
       </nav>
 
-      {/* Sidebar: slides in after the hero */}
-      <aside className="h3-rail" aria-label="Browse games">
-        {/* Neon border glow (a blurred copy of the ring drawn by .h3-rail::before) */}
-        <span className="h3-rail-glow" aria-hidden="true">
-          <i />
-        </span>
-        <Link to="/" className="h3-rail-item" data-label="Home">
-          <House size={18} />
-        </Link>
-        <span className="h3-rail-sep" aria-hidden="true" />
-        {usedCategories.map((c) => {
-          const Icon = categoryIcon[c];
-          return (
-            <button
-              key={c}
-              type="button"
-              className={`h3-rail-item${category === c ? " active" : ""}`}
-              data-label={c === "All" ? "All games" : c}
-              aria-pressed={category === c}
-              onClick={() => pick(c)}
-            >
-              <Icon size={18} />
-            </button>
-          );
-        })}
-        <span className="h3-rail-sep" aria-hidden="true" />
-        <Link to="/profile" className="h3-rail-item" data-label="Leaderboards">
-          <Trophy size={18} />
-        </Link>
-      </aside>
+      {!videoHero ? (
+        <>
+        {/* Sidebar: slides in after the hero */}
+        <aside className="h3-rail" aria-label="Browse games">
+          {/* Neon border glow (a blurred copy of the ring drawn by .h3-rail::before) */}
+          <span className="h3-rail-glow" aria-hidden="true">
+            <i />
+          </span>
+          <Link to="/" className="h3-rail-item" data-label="Home">
+            <House size={18} />
+          </Link>
+          <span className="h3-rail-sep" aria-hidden="true" />
+          {usedCategories.map((c) => {
+            const Icon = categoryIcon[c];
+            return (
+              <button
+                key={c}
+                type="button"
+                className={`h3-rail-item${category === c ? " active" : ""}`}
+                data-label={c === "All" ? "All games" : c}
+                aria-pressed={category === c}
+                onClick={() => pick(c)}
+              >
+                <Icon size={18} />
+              </button>
+            );
+          })}
+          <span className="h3-rail-sep" aria-hidden="true" />
+          <Link to="/profile" className="h3-rail-item" data-label="Leaderboards">
+            <Trophy size={18} />
+          </Link>
+        </aside>
+        </>
+      ) : null}
 
       {/* Compact text hero */}
       <header className="h3-hero" ref={heroRef}>
@@ -238,51 +338,68 @@ export default function Home3() {
         </p>
       </header>
 
-      <section className="h3-library" id="h3-library">
-        <header className="h3-lib-head">
-          <span className="h3-chip">Game library</span>
-          <h2>{category === "All" ? "Pick a world. Play instantly." : category}</h2>
-          <p>
-            {list.length} {list.length === 1 ? "game" : "games"} · free · no downloads
-          </p>
-        </header>
+      {/* /home3: featured games carousel where the dive lands on orange */}
+      {videoHero && featuredGames.length >= 3 ? (
+        <>
+          {/* Scroll room for the dive; the carousel itself is pinned and fades in on top */}
+          <div className="h3-dive-space" aria-hidden="true" />
+          <div ref={fcRef} className="h3-fcwrap" data-inactive="">
+            <FeatureCarousel items={featuredGames} onInk={setNavInk} />
+          </div>
+          {/* Time on the carousel before the footer slides up over it */}
+          <div className="h3-fc-space" aria-hidden="true" />
+        </>
+      ) : null}
 
-        <div className="h3-grid" key={category}>
-          {list.map((g, i) => (
-            <GlassCard key={g.id} game={g} index={i} />
-          ))}
-        </div>
-      </section>
+      {!videoHero ? (
+        <section className="h3-library" id="h3-library">
+          <header className="h3-lib-head">
+            <span className="h3-chip">Game library</span>
+            <h2>{category === "All" ? "Pick a world. Play instantly." : category}</h2>
+            <p>
+              {list.length} {list.length === 1 ? "game" : "games"} · free · no downloads
+            </p>
+          </header>
+  
+          <div className="h3-grid" key={category}>
+            {list.map((g, i) => (
+              <GlassCard key={g.id} game={g} index={i} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Studio: about + footer */}
-      <footer className="h3-studio" id="studio">
-        <span className="h3-chip">The studio</span>
-        <h2>Senevon Game Studio</h2>
-        <p className="h3-studio-lead">
-          We build hand-crafted browser games you can play in a single click — from one-minute reflex
-          tests to open-world adventures, all saved to one account and ranked on global leaderboards.
-        </p>
-        <ul className="h3-studio-stats">
-          <li>
-            <b>{games.length}</b>
-            <span>Games</span>
-          </li>
-          <li>
-            <b>{usedCategories.length - 1}</b>
-            <span>Categories</span>
-          </li>
-          <li>
-            <b>100%</b>
-            <span>Free to play</span>
-          </li>
-        </ul>
-        <nav className="h3-studio-links" aria-label="Footer">
-          <a href="#h3-library">Games</a>
-          <Link to="/profile">Leaderboards</Link>
-          <Link to="/login">Sign in</Link>
-        </nav>
-        <p className="h3-studio-copy">© {new Date().getFullYear()} Senevon Game Studio</p>
-      </footer>
+      <>
+        <footer className="h3-studio" id="studio">
+          <span className="h3-chip">The studio</span>
+          <h2>Senevon Game Studio</h2>
+          <p className="h3-studio-lead">
+            We build hand-crafted browser games you can play in a single click — from one-minute reflex
+            tests to open-world adventures, all saved to one account and ranked on global leaderboards.
+          </p>
+          <ul className="h3-studio-stats">
+            <li>
+              <b>{games.length}</b>
+              <span>Games</span>
+            </li>
+            <li>
+              <b>{usedCategories.length - 1}</b>
+              <span>Categories</span>
+            </li>
+            <li>
+              <b>100%</b>
+              <span>Free to play</span>
+            </li>
+          </ul>
+          <nav className="h3-studio-links" aria-label="Footer">
+            {videoHero ? <Link to="/games">All games</Link> : <a href="#h3-library">Games</a>}
+            <Link to="/profile">Leaderboards</Link>
+            <Link to="/login">Sign in</Link>
+          </nav>
+          <p className="h3-studio-copy">© {new Date().getFullYear()} Senevon Game Studio</p>
+        </footer>
+      </>
     </div>
   );
 }

@@ -1050,3 +1050,223 @@
     max-width: 320px;
   }
 }
+
+/* ============================================================
+   /home3 test: looping video behind the hero (.h3-vhero)
+   ============================================================ */
+.h3 .h3-logo .h3-logo-light {
+  display: none;
+}
+
+.h3-vhero .h3-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 92vh;
+  justify-content: flex-start;
+  padding-top: clamp(150px, 24vh, 240px);
+  padding-bottom: 120px;
+}
+
+.h3-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #2b3550 url("/images/home3/hero-bg-poster.webp") center / cover no-repeat;
+}
+
+.h3-hero-bg video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Darkens the sky a little behind the text and nav, and melts the bottom into the flat page */
+.h3-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 14, 30, 0.45) 0%, rgba(10, 14, 30, 0.12) 38%, rgba(10, 14, 30, 0) 58%),
+    linear-gradient(180deg, rgba(219, 219, 219, 0) 72%, rgba(219, 219, 219, 0.85) 93%, #dbdbdb 100%);
+}
+
+.h3-vhero .h3-hero h1 {
+  color: #fff;
+  text-shadow: 0 2px 30px rgba(10, 14, 30, 0.35);
+}
+
+.h3-vhero .h3-hero .h3-caption {
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 12px rgba(10, 14, 30, 0.5);
+}
+
+/* Nav over the video (before the scroll band appears): white text + white logo */
+.h3-vhero:not(.h3-scrolled) .h3-menu a {
+  color: #fff;
+}
+
+.h3-vhero:not(.h3-scrolled) .h3-logo .h3-logo-dark {
+  display: none;
+}
+
+.h3-vhero:not(.h3-scrolled) .h3-logo .h3-logo-light {
+  display: block;
+}
+
+@media (max-width: 820px) {
+  .h3-vhero .h3-hero {
+    min-height: 78vh;
+    padding-top: 130px;
+  }
+
+  /* On tall phone screens keep the person (left of centre) in view */
+  .h3-hero-bg video {
+    object-position: 38% center;
+  }
+}
+
+/* Keep the person in the video clear: headline up in the sky, caption in the bottom-left corner */
+.h3-vhero .h3-hero {
+  padding-top: clamp(104px, 14vh, 140px);
+  gap: 18px;
+}
+
+.h3-vhero .h3-hero .h3-caption {
+  position: absolute;
+  left: clamp(18px, 3vw, 40px);
+  bottom: clamp(90px, 14vh, 130px);
+  margin: 0;
+  max-width: none;
+}
+
+@media (max-width: 820px) {
+  .h3-vhero .h3-hero {
+    padding-top: 104px;
+  }
+
+  .h3-vhero .h3-hero .h3-caption {
+    bottom: 110px;
+    right: 18px;
+  }
+}
+
+@media (max-width: 820px) {
+  /* Phones: caption sits in the faded bottom strip (below the person), in dark ink */
+  .h3-vhero .h3-hero .h3-caption {
+    bottom: 18px;
+    color: var(--h3-ink2);
+    text-shadow: none;
+  }
+}
+
+/* ---------- /home3: fixed video background (hero loop → scroll dive → orange) ---------- */
+.h3.h3-vhero {
+  background: transparent;
+}
+
+.h3-bgfx {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: #fc6e1b;
+}
+
+.h3-bgfx video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.h3-bg-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 14, 30, 0.45) 0%, rgba(10, 14, 30, 0.12) 38%, rgba(10, 14, 30, 0) 58%);
+}
+
+/* Page content above the background */
+.h3-vhero > .h3-hero,
+.h3-vhero > .h3-library,
+.h3-vhero > .h3-studio {
+  position: relative;
+  z-index: 1;
+}
+
+/* The video now runs behind everything, so the hero no longer fades into the flat page */
+.h3-vhero .h3-hero {
+  isolation: auto;
+  overflow: visible;
+}
+
+/* Library on the orange: dark ink heading, readable white cards */
+.h3-vhero .h3-lib-head p {
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.h3-vhero .h3-lib-head .h3-chip {
+  background: #111;
+  color: #fff;
+}
+
+@media (max-width: 820px) {
+  .h3-bgfx video {
+    object-position: 38% center;
+  }
+
+  .h3-vhero .h3-hero .h3-caption {
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 12px rgba(10, 14, 30, 0.5);
+  }
+}
+
+/* Full-screen hero; the dive's scroll room follows it (.h3-dive-space) */
+.h3-vhero .h3-hero {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+@media (max-width: 820px) {
+  .h3-vhero .h3-hero {
+    min-height: 100svh;
+  }
+}
+
+/* The carousel sits right where the dive lands on orange; the library follows it */
+.h3-vhero > .fc + .h3-library {
+  padding-top: clamp(64px, 10vh, 120px);
+}
+
+/* ---------- /home3 nav: always transparent ----------
+   White over the video; over the carousel it takes the slide's text colour (white or black). */
+.h3-vhero .h3-nav::before {
+  display: none;
+}
+
+.h3-vhero .h3-menu a {
+  color: #fff;
+  transition: color 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.h3-vhero.h3-at-fc .h3-menu a {
+  color: var(--h3-fc-ink);
+}
+
+.h3-vhero .h3-logo .h3-logo-dark {
+  display: none;
+}
+
+.h3-vhero .h3-logo .h3-logo-light {
+  display: block;
+}
+
+.h3-vhero.h3-at-fc.h3-fc-dark .h3-logo .h3-logo-dark {
+  display: block;
+}
+
+.h3-vhero.h3-at-fc.h3-fc-dark .h3-logo .h3-logo-light {
+  display: none;
+}

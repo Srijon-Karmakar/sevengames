@@ -13,16 +13,18 @@ import { trackPageview } from "./lib/track";
 // Home page (the floating-island fly-in) and the /home2 test page: code-split.
 const Home3 = lazy(() => import("./pages/Home3"));
 const Home2 = lazy(() => import("./pages/Home2"));
+const GamesGlobe = lazy(() => import("./pages/GamesGlobe"));
 
 /** The landing page lives outside the Shell (it has its own nav, sidebar and background). */
-function Landing() {
+function Landing({ videoHero = false }: { videoHero?: boolean }) {
   const location = useLocation();
   useEffect(() => {
     trackPageview(location.pathname);
   }, [location.pathname]);
   return (
     <Suspense fallback={<div style={{ minHeight: "100vh", background: "#e7ebe8" }} />}>
-      <Home3 />
+      {/* key: switching between / and /home3 remounts the page */}
+      <Home3 key={videoHero ? "video" : "flat"} videoHero={videoHero} />
     </Suspense>
   );
 }
@@ -54,8 +56,18 @@ export default function App() {
     <AuthProvider>
       <RouterRoutes>
         <Route path="/admin/*" element={<Admin />} />
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<Landing videoHero />} />
+        {/* The video-hero design is now the home page */}
         <Route path="/home3" element={<Navigate to="/" replace />} />
+        {/* Full-screen draggable globe of every game */}
+        <Route
+          path="/games"
+          element={
+            <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0d0d0f" }} />}>
+              <GamesGlobe />
+            </Suspense>
+          }
+        />
         <Route
           path="/home2"
           element={

@@ -66,42 +66,67 @@
   }
 }
 
-/* ---------- Account slot in the nav (shared with the home page) ---------- */
+/* ---------- Account slot in the nav (shared with the home page) ----------
+   A 40px orange circle with the account icon (or avatar); on hover / keyboard focus it slides
+   open to the left to reveal its label. */
 .h3-account {
   justify-self: end;
-  display: inline-grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  border-radius: 999px;
   overflow: hidden;
   background: var(--h3-lime);
   color: var(--h3-ink);
-  font-weight: 600;
+  text-decoration: none;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8), 0 6px 16px -6px rgba(244, 96, 0, 0.7);
-  transition: transform 0.2s ease;
+  transition: box-shadow 0.25s ease, transform 0.2s ease;
 }
 
-.h3-account:hover {
-  transform: scale(1.06);
+.h3-account-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
 }
 
-.h3-account img {
+.h3-account-icon img {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.h3-account-signin {
-  width: auto;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 999px;
+.h3-account-label {
+  max-width: 0;
+  opacity: 0;
+  white-space: nowrap;
   font-family: var(--h3-mono);
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  transition:
+    max-width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.25s ease,
+    padding 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+.h3-account:hover .h3-account-label,
+.h3-account:focus-visible .h3-account-label {
+  max-width: 120px;
+  opacity: 1;
+  padding-left: 16px;
+}
+
+.h3-account:active {
+  transform: scale(0.95);
+}
+
 
 /* ---------- Logo variant per nav band ---------- */
 .site .site-logo-light {
@@ -187,4 +212,27 @@
   .h3-nav > .h3-nav-end {
     grid-column: 3;
   }
+}
+
+/* Beats the scoped ".h3 a { color: inherit }" so the icon stays dark on orange */
+.h3-nav .h3-account {
+  color: var(--h3-ink);
+}
+
+/* Right-aligned nav links (e.g. "All games" beside the account button); stays visible on phones */
+.h3-nav .h3-nav-end {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.h3-nav .h3-menu-end {
+  display: flex;
+  gap: 18px;
+}
+
+.h3-nav .h3-menu-end a {
+  white-space: nowrap;
 }

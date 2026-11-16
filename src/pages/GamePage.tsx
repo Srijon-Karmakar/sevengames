@@ -97,7 +97,7 @@ export default function GamePage() {
 
   return (
     <div className="page game-page gp" style={{ "--accent": game.accent } as React.CSSProperties}>
-      <Link to="/" className="back-link">
+      <Link to="/games" className="back-link">
         <ChevronLeft size={18} />
         All games
       </Link>
