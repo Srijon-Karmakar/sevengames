@@ -360,3 +360,20 @@
   transform: translateY(-2px);
   opacity: 0.75;
 }
+
+/* Phones: title, tags and Play now centred */
+@media (max-width: 820px) {
+  .gs-title {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .gs-meta {
+    width: 100%;
+  }
+
+  .gs-hint {
+    white-space: nowrap;
+    font-size: 10px;
+  }
+}

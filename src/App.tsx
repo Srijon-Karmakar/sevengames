@@ -6,6 +6,7 @@ import GamePage from "./pages/GamePage";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import AuthCallback from "./pages/AuthCallback";
+import Privacy from "./pages/Privacy";
 import Admin from "./pages/admin/Admin";
 
 import { trackPageview } from "./lib/track";
@@ -43,6 +44,7 @@ function Shell() {
         <Route path="/login" element={<Login />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/privacy" element={<Privacy />} />
         {/* The old home page is retired; old links land on the new one */}
         <Route path="/classic" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

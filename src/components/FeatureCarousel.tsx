@@ -40,9 +40,14 @@ export default function FeatureCarousel({
   // section's top-left) and the radius that reaches the farthest corner.
   const [reveal, setReveal] = useState<{ color: string; id: number; x: number; y: number; r: number } | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
-  // Each disc's position on the previous render, to spot the one that wraps from one hidden
-  // side to the other (it must jump, not roll across the screen).
-  const prevPos = useRef(new Map<string, number>());
+  // The slide shown before the latest change (updated after commit, so React's double render
+  // in development can't skew it). Used to spot the disc that wraps from one hidden side to the
+  // other: it must jump, not roll across the screen.
+  const shownRef = useRef(0);
+  const prevIndex = shownRef.current;
+  useEffect(() => {
+    shownRef.current = index;
+  }, [index]);
   const colorOf = (i: number) => COLORS[i % COLORS.length];
 
   const go = useCallback(
@@ -147,9 +152,10 @@ export default function FeatureCarousel({
           if (pos > count / 2) pos -= count;
           if (pos < -count / 2) pos += count;
           const where = pos === 0 ? "center" : pos === -1 ? "left" : pos === 1 ? "right" : pos < 0 ? "far-left" : "far-right";
-          const before = prevPos.current.get(g.id);
-          const jump = before !== undefined && Math.abs(pos - before) > 1;
-          prevPos.current.set(g.id, pos);
+          let before = i - prevIndex;
+          if (before > count / 2) before -= count;
+          if (before < -count / 2) before += count;
+          const jump = Math.abs(pos - before) > 1;
           const cls = `fc-disc is-${where}${jump ? " is-jump" : ""}`;
           const disc = (
             <>

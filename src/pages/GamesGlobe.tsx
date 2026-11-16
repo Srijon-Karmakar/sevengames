@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Play } from "lucide-react";
 import { games, type Game } from "../catalog";
 import NavAccount from "../components/NavAccount";
-import { RiHomeLine } from "../components/ReIcons";
+import { RiHomeSmile } from "../components/ReIcons";
 import { inkFor } from "../components/FeatureCarousel";
 import "./home3.css";
 import "./games-globe.css";
@@ -271,7 +271,7 @@ export default function GamesGlobe() {
         </Link>
         <div className="h3-nav-end">
           <Link className="gs-home" to="/" aria-label="Home" title="Home">
-            <RiHomeLine size={22} aria-hidden="true" />
+            <RiHomeSmile size={22} aria-hidden="true" />
           </Link>
           <div className="h3-menu h3-menu-end">
             <Link to="/games" aria-current="page">

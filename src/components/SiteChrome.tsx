@@ -108,7 +108,9 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
       <footer className="site-footer">
         <img src="/logo/logo-h-light-nav.webp" width={432} height={120} alt="Senevon Game Studio" loading="lazy" />
         <p>Play instantly, discover new worlds, and be part of a global gaming universe.</p>
-        <p className="site-footer-copy">© {new Date().getFullYear()} Senevon Game Studio</p>
+        <p className="site-footer-copy">
+          © {new Date().getFullYear()} Senevon Game Studio · <Link to="/privacy">Privacy policy</Link>
+        </p>
       </footer>
     </div>
   );

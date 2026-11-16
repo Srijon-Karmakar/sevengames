@@ -410,3 +410,99 @@
     -webkit-backdrop-filter: none;
   }
 }
+
+/* ============================================================
+   Game pages: flat, clean colours at every screen size, no glass.
+   light = #d1d1d1 page / #ececec panels · dark = #383838 page / #2c2c2c panels
+   ============================================================ */
+.site[data-gtheme="light"] {
+  --gp-page: #d1d1d1;
+  --gp-panel: #ececec;
+  --gp-line: rgba(0, 0, 0, 0.08);
+  --gp-frame: var(--gp-panel);
+  --gp-frame-border: var(--gp-line);
+  --gp-seg: rgba(0, 0, 0, 0.06);
+  --gp-shadow: 0 14px 30px -22px rgba(0, 0, 0, 0.35);
+  background: var(--gp-page);
+}
+
+.site[data-gtheme="dark"] {
+  --gp-page: #383838;
+  --gp-panel: #2c2c2c;
+  --gp-line: rgba(255, 255, 255, 0.07);
+  --gp-frame: var(--gp-panel);
+  --gp-frame-border: var(--gp-line);
+  --gp-seg: rgba(255, 255, 255, 0.07);
+  --gp-shadow: 0 14px 30px -22px rgba(0, 0, 0, 0.6);
+  background: var(--gp-page);
+}
+
+/* Plain page colour instead of the blurred island image */
+.site[data-gtheme] .site-backdrop {
+  inset: 0;
+  background: var(--gp-page);
+  filter: none;
+}
+
+/* Solid panels everywhere the global theme uses glass */
+.site[data-gtheme] .site-main,
+.site[data-gtheme] .site-footer {
+  --glass: var(--gp-panel);
+  --glass-strong: var(--gp-panel);
+  --glass-border: var(--gp-line);
+  --bg-elevated: var(--gp-panel);
+}
+
+.site[data-gtheme] .gp-frame,
+.site[data-gtheme] .gp .leaderboard,
+.site[data-gtheme] .card {
+  background: var(--gp-panel);
+  border: 1px solid var(--gp-line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Nav band: solid page colour, no blur / fade */
+.site[data-gtheme] .h3-nav::before {
+  inset: 0;
+  background: var(--gp-page);
+  -webkit-mask-image: none;
+  mask-image: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 0 var(--gp-line);
+}
+
+/* Sidebar + theme toggle: solid */
+.site[data-gtheme] .h3-rail {
+  background: var(--gp-panel);
+  border-color: var(--gp-line);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.site[data-gtheme="dark"] .h3-rail-item {
+  color: rgba(255, 244, 236, 0.9);
+}
+
+.site[data-gtheme="dark"] .h3-rail-item.active {
+  color: var(--h3-ink);
+}
+
+.site[data-gtheme] .h3-theme-toggle {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.site[data-gtheme="light"] .h3-theme-toggle {
+  background: var(--gp-panel);
+}
+
+.site[data-gtheme="dark"] .h3-theme-toggle {
+  background: var(--gp-panel);
+  border-color: var(--gp-line);
+}
+
+.site[data-gtheme="dark"] .h3-rail-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}

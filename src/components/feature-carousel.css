@@ -136,16 +136,17 @@
   z-index: 1;
 }
 
-/* Off-stage discs wait fully past the screen edge (clipped by the section), at side-disc size,
-   so leaving and arriving discs keep rolling in and out of view instead of fading. The extra
-   rotation matches the extra distance (≈ 50vw / 10.5vw radius ≈ 270°). */
+/* Off-stage discs wait just past the screen edge (clipped by the section) at side-disc size.
+   Kept close to the edge so the leaving disc and the arriving disc are both on screen for the
+   whole move: one rolls out while the other rolls in, at the same time and speed.
+   Extra rotation = extra distance / radius (28vw / 10.5vw ≈ 153°). */
 .fc-disc.is-far-left {
-  transform: translateX(-86vw) scale(0.62) rotate(-391deg);
+  transform: translateX(-64vw) scale(0.62) rotate(-274deg);
   pointer-events: none;
 }
 
 .fc-disc.is-far-right {
-  transform: translateX(86vw) scale(0.62) rotate(391deg);
+  transform: translateX(64vw) scale(0.62) rotate(274deg);
   pointer-events: none;
 }
 
@@ -328,12 +329,13 @@
     transform: translateX(56vw) scale(0.55) rotate(100deg);
   }
 
+  /* just past the edge on phones (16vw beyond the side disc / 17.6vw radius ≈ 52°) */
   .fc-disc.is-far-left {
-    transform: translateX(-112vw) scale(0.55) rotate(-283deg);
+    transform: translateX(-72vw) scale(0.55) rotate(-152deg);
   }
 
   .fc-disc.is-far-right {
-    transform: translateX(112vw) scale(0.55) rotate(283deg);
+    transform: translateX(72vw) scale(0.55) rotate(152deg);
   }
 
   .fc-label b {

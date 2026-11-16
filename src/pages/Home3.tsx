@@ -329,6 +329,10 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
             <span>A Universe of Games</span>
           </span>
         </h1>
+        <p className="h3-subtitle">
+          Hand-crafted browser games you can play in one click — no downloads, one account, global
+          leaderboards.
+        </p>
         <p className="h3-caption">
           Play instantly,
           <br />
@@ -396,6 +400,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
             {videoHero ? <Link to="/games">All games</Link> : <a href="#h3-library">Games</a>}
             <Link to="/profile">Leaderboards</Link>
             <Link to="/login">Sign in</Link>
+            <Link to="/privacy">Privacy policy</Link>
           </nav>
           <p className="h3-studio-copy">© {new Date().getFullYear()} Senevon Game Studio</p>
         </footer>
