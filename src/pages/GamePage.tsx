@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronLeft, ExternalLink, Maximize, Minimize, MonitorPlay } from "lucide-react";
+import { ChevronLeft, ExternalLink, Info, Maximize, Minimize, MonitorPlay } from "lucide-react";
 import { GamePoster } from "../components/GamePoster";
 import { getGame, scoreLabel } from "../catalog";
 import { engines } from "../games";
@@ -10,6 +10,7 @@ import { useBestForGame } from "../hooks/useBest";
 import Leaderboard from "../components/Leaderboard";
 import { trackGame } from "../lib/track";
 import { pushRecent } from "../lib/recent";
+import "./game-page.css";
 
 function GameRunner({ gameId, onScore }: { gameId: string; onScore: (score: number) => void }) {
   const Engine = engines[gameId as keyof typeof engines];
@@ -95,13 +96,13 @@ export default function GamePage() {
   );
 
   return (
-    <div className="page game-page">
+    <div className="page game-page gp" style={{ "--accent": game.accent } as React.CSSProperties}>
       <Link to="/" className="back-link">
         <ChevronLeft size={18} />
         All games
       </Link>
 
-      <header className="game-header" style={{ "--accent": game.accent } as React.CSSProperties}>
+      <header className="game-header">
         <GamePoster game={game} size="hero" />
         <div className="game-header-text">
           <p className="game-meta">
@@ -113,57 +114,58 @@ export default function GamePage() {
       </header>
 
       {!user ? (
-        <div className="signin-hint">
-          <p>
-            Playing as guest — scores save to this device only.{" "}
-            <Link to={`/login?next=/game/${game.id}`}>Sign in</Link> to save them to your account and
-            appear on the global leaderboard.
-          </p>
-        </div>
+        <p className="gp-guest">
+          <Info size={15} aria-hidden="true" />
+          <span>
+            Playing as guest — scores stay on this device.{" "}
+            <Link to={`/login?next=/game/${game.id}`}>Sign in</Link> to join the global leaderboard.
+          </span>
+        </p>
       ) : null}
 
-      <div
-        className="play-modes"
-        role="group"
-        aria-label="How to play"
-        style={{ "--accent": game.accent } as React.CSSProperties}
-      >
-        <button type="button" className={full ? "" : "active"} aria-pressed={!full} onClick={exitFull}>
-          <MonitorPlay size={16} />
-          Play here
-        </button>
-        <button type="button" className={full ? "active" : ""} aria-pressed={full} onClick={enterFull}>
-          <Maximize size={16} />
-          Full screen
-        </button>
-        {game.kind === "iframe" ? (
-          <a href={game.embedUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink size={16} />
-            Open original site
-          </a>
-        ) : null}
-      </div>
-
       <div className="game-layout">
-        <section
-          ref={stageRef}
-          className={`game-stage card${full ? " is-full" : ""}`}
-          style={{ "--accent": game.accent } as React.CSSProperties}
-        >
-          {full ? (
-            <button type="button" className="exit-full" onClick={exitFull} aria-label="Exit full screen">
-              <Minimize size={16} />
-              <span>Exit</span>
-            </button>
-          ) : null}
-          {game.kind === "builtin" ? (
-            <GameRunner gameId={game.engine} onScore={handleFinish} />
-          ) : (
-            <div className="iframe-wrap">
-              <iframe src={game.embedUrl} title={game.title} allow="gamepad; fullscreen" />
+        {/* Glass frame: toolbar on top, the game edge-to-edge underneath */}
+        <div className="gp-frame">
+          <div className="gp-toolbar">
+            <div className="gp-now">
+              <span className="gp-dot" aria-hidden="true" />
+              <span className="gp-now-title">{game.title}</span>
+              <span className="gp-now-meta">{game.kind === "iframe" ? "Web game" : "Senevon original"}</span>
             </div>
-          )}
-        </section>
+            <div className="gp-modes" role="group" aria-label="How to play">
+              <button type="button" className={full ? "" : "active"} aria-pressed={!full} onClick={exitFull}>
+                <MonitorPlay size={15} />
+                <span>Play here</span>
+              </button>
+              <button type="button" className={full ? "active" : ""} aria-pressed={full} onClick={enterFull}>
+                <Maximize size={15} />
+                <span>Full screen</span>
+              </button>
+              {game.kind === "iframe" ? (
+                <a href={game.embedUrl} target="_blank" rel="noopener noreferrer" aria-label="Open original site">
+                  <ExternalLink size={15} />
+                  <span>Original site</span>
+                </a>
+              ) : null}
+            </div>
+          </div>
+
+          <section ref={stageRef} className={`game-stage gp-stage${full ? " is-full" : ""}`}>
+            {full ? (
+              <button type="button" className="exit-full" onClick={exitFull} aria-label="Exit full screen">
+                <Minimize size={16} />
+                <span>Exit</span>
+              </button>
+            ) : null}
+            {game.kind === "builtin" ? (
+              <GameRunner gameId={game.engine} onScore={handleFinish} />
+            ) : (
+              <div className="iframe-wrap">
+                <iframe src={game.embedUrl} title={game.title} allow="gamepad; fullscreen" />
+              </div>
+            )}
+          </section>
+        </div>
         <Leaderboard
           leaders={leaders}
           loading={loading}
