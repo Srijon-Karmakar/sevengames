@@ -1530,3 +1530,127 @@
 .h3-rail-item {
   border-radius: 50%;
 }
+
+/* ---------- Sidebar: animated orange neon running around the border ----------
+   A rotating conic gradient masked to a thin ring (::before), plus a blurred copy of the ring
+   (.h3-rail-glow) for the glow. @property lets the angle animate smoothly. */
+@property --h3-neon-a {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.h3-rail::before,
+.h3-rail-glow i {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--h3-neon-a),
+    transparent 0deg,
+    rgba(244, 96, 0, 0) 40deg,
+    #ff7a1a 95deg,
+    #ffd2a8 120deg,
+    #f46000 145deg,
+    rgba(244, 96, 0, 0) 200deg,
+    transparent 220deg,
+    rgba(244, 96, 0, 0.55) 290deg,
+    transparent 340deg
+  );
+  animation: h3-neon-spin 4.5s linear infinite;
+}
+
+/* Crisp ring, and the same ring inside the glow element */
+.h3-rail::before,
+.h3-rail-glow i {
+  padding: 1.5px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+.h3-rail-glow i {
+  padding: 3px;
+}
+
+/* Soft neon glow: the blur sits on the wrapper so it isn't clipped by the ring mask */
+.h3-rail-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  filter: blur(7px);
+  opacity: 0.9;
+}
+
+@keyframes h3-neon-spin {
+  to {
+    --h3-neon-a: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .h3-rail::before,
+  .h3-rail-glow i {
+    animation: none;
+  }
+}
+
+/* ---------- Mobile: two columns of square cards with 4:3 posters ----------
+   A square card is too short for everything, so on phones the poster goes on top, the title and
+   category sit under it, and the minutes counter and "played" line are hidden (the Play chip
+   rides on the poster's corner). */
+@media (max-width: 820px) {
+  .h3-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .h3-gcard {
+    aspect-ratio: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    padding: 9px;
+    overflow: hidden;
+  }
+
+  .h3-gcard-media {
+    order: -1;
+    flex: none;
+    margin-top: 0;
+    aspect-ratio: 4 / 3;
+  }
+
+  .h3-gcard h4 {
+    margin-top: 6px;
+    padding-right: 0;
+    font-size: 13.5px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .h3-gcard .h3-card-note {
+    margin-top: 2px;
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .h3-gcard .h3-card-num,
+  .h3-gcard .h3-card-foot {
+    display: none;
+  }
+
+  .h3-gcard-tag {
+    right: 15px;
+    top: 15px;
+    font-size: 8.5px;
+    padding: 3px 6px;
+  }
+}

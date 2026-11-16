@@ -516,6 +516,10 @@ export default function Home3() {
 
       {/* Sidebar: slides in after the hero */}
       <aside className="h3-rail" aria-label="Browse games">
+        {/* Neon border glow (a blurred copy of the ring drawn by .h3-rail::before) */}
+        <span className="h3-rail-glow" aria-hidden="true">
+          <i />
+        </span>
         <Link to="/" className="h3-rail-item" data-label="Home">
           <House size={18} />
         </Link>
