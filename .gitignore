@@ -7,3 +7,6 @@ dist
 .DS_Store
 supabase/.env.secrets
 supabase/.temp
+
+# Raw/working art (not deployed)
+asset-sources/
