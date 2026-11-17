@@ -1213,8 +1213,9 @@
 }
 
 @media (max-width: 820px) {
+  /* Phones: frame the person AND the laptop (the icon smoke spawns from its screen) */
   .h3-bgfx video {
-    object-position: 38% center;
+    object-position: 45% center;
   }
 
   .h3-vhero .h3-hero .h3-caption {

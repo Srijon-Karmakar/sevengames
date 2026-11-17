@@ -6,6 +6,7 @@ import { categoryIcon } from "../lib/categoryIcons";
 import { useBestForGame } from "../hooks/useBest";
 import NavAccount from "../components/NavAccount";
 import FeatureCarousel from "../components/FeatureCarousel";
+import LaptopIconSmoke from "../components/LaptopIconSmoke";
 import "../components/feature-carousel.css";
 import "./home3.css";
 
@@ -126,6 +127,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
   const loopRef = useRef<HTMLVideoElement>(null);
   const diveRef = useRef<HTMLVideoElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
+  const smokeRef = useRef<HTMLDivElement>(null);
   const fcRef = useRef<HTMLDivElement>(null);
   // Text colour of the current carousel slide (white or near-black), used by the transparent nav.
   const [navInk, setNavInk] = useState("#ffffff");
@@ -154,6 +156,8 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
       else if (handOver < 1 && loop.paused) void loop.play().catch(() => {});
       // The sky shade behind the hero text fades as the camera dives in.
       shade.style.opacity = `${1 - clamp(cur / 0.35)}`;
+      // The icon smoke from the laptop fades out as the dive starts (it stops spawning at 0).
+      if (smokeRef.current) smokeRef.current.style.opacity = `${1 - clamp(cur / 0.12)}`;
       // The pinned carousel fades in as the dive lands on orange (its colour matches the last frame).
       const fc = fcRef.current;
       if (fc) {
@@ -242,6 +246,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
           <video ref={diveRef} className="h3-bg-dive" src={DIVE_VIDEO} poster={HERO_POSTER} muted playsInline preload="auto" />
           <video ref={loopRef} className="h3-bg-loop" src={HERO_VIDEO} poster={HERO_POSTER} autoPlay muted loop playsInline preload="auto" />
           <div ref={shadeRef} className="h3-bg-shade" />
+          <LaptopIconSmoke layerRef={smokeRef} videoRef={loopRef} />
         </div>
       ) : null}
 

@@ -49,10 +49,12 @@ export function useAuthState(): AuthState {
       configured: isSupabaseConfigured,
       async signInWithGoogle() {
         const client = await requireClient();
-        await client.auth.signInWithOAuth({
+        const { error } = await client.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo: `${window.location.origin}/auth/callback` },
         });
+        // Supabase reports OAuth problems (e.g. provider not enabled) as a value: surface it
+        if (error) throw error;
       },
       async signInWithPassword(email, password) {
         try {

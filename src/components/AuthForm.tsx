@@ -33,8 +33,15 @@ export default function AuthForm({
 
   async function google() {
     setBusy(true);
+    setMessage("");
     window.sessionStorage.setItem("7games:redirect", redirectTo);
-    await auth.signInWithGoogle();
+    try {
+      // On success the browser leaves for Google, so `busy` only needs resetting on failure.
+      await auth.signInWithGoogle();
+    } catch (error) {
+      setBusy(false);
+      setMessage(error instanceof Error ? error.message : "Google sign-in failed.");
+    }
   }
 
   return (
