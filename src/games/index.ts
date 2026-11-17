@@ -14,7 +14,7 @@ import WhackAMole from "./whack-a-mole";
 import ColorMatch from "./color-match";
 import SlidingPuzzle from "./sliding-puzzle";
 import SnakeGame from "./snake";
-import CarromGame from "./carrom";
+import CarromGame from "./carrom/index";
 import StackGame from "./stack";
 import DodgeGame from "./dodge";
 import ConnectFour from "./connect-four";

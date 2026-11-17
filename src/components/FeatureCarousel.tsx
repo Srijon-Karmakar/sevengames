@@ -27,15 +27,28 @@ export function inkFor(hex: string) {
 export default function FeatureCarousel({
   items,
   onInk,
+  colorFor,
+  eyebrow,
+  soonIds,
+  label = "Featured games",
 }: {
   items: Game[];
   /** Called with the current text colour, so the page can match its nav to the slide. */
   onInk?: (ink: string) => void;
+  /** Background colour per slide (default: the home palette). */
+  colorFor?: (game: Game, index: number) => string;
+  /** Small heading above the game title (e.g. the category name). */
+  eyebrow?: string;
+  /** Slides that are "Coming soon" placeholders: not playable. */
+  soonIds?: Set<string>;
+  label?: string;
 }) {
   const count = items.length;
+  const colorOf = (i: number) => (colorFor ? colorFor(items[i], i) : COLORS[i % COLORS.length]);
+  const isSoon = (g: Game) => Boolean(soonIds?.has(g.id));
   const [index, setIndex] = useState(0);
   // Colour already filling the section, and the colour currently growing from the centre.
-  const [base, setBase] = useState(COLORS[0]);
+  const [base, setBase] = useState(() => colorOf(0));
   // The growing circle: its colour, where it starts (centre of the middle poster, in px from the
   // section's top-left) and the radius that reaches the farthest corner.
   const [reveal, setReveal] = useState<{ color: string; id: number; x: number; y: number; r: number } | null>(null);
@@ -48,8 +61,6 @@ export default function FeatureCarousel({
   useEffect(() => {
     shownRef.current = index;
   }, [index]);
-  const colorOf = (i: number) => COLORS[i % COLORS.length];
-
   const go = useCallback(
     (next: number) => {
       const i = ((next % count) + count) % count;
@@ -118,7 +129,7 @@ export default function FeatureCarousel({
       className="fc"
       style={{ "--fc-base": base, "--fc-accent": color, "--fc-ink": ink } as React.CSSProperties}
       aria-roledescription="carousel"
-      aria-label="Featured games"
+      aria-label={label}
     >
       {/* Colour growing from the centre of the screen, behind the posters */}
       {reveal ? (
@@ -141,7 +152,10 @@ export default function FeatureCarousel({
       ) : null}
 
       <header className="fc-head" key={game.id}>
-        <h2 className="fc-title">{game.title}</h2>
+        <div>
+          {eyebrow ? <p className="fc-eyebrow">{eyebrow}</p> : null}
+          <h2 className="fc-title">{game.title}</h2>
+        </div>
         <p className="fc-desc">{game.description}</p>
       </header>
 
@@ -160,17 +174,24 @@ export default function FeatureCarousel({
           const disc = (
             <>
               <span className="fc-art">
-                {g.poster ? <img src={g.poster} alt="" draggable={false} /> : <span className="fc-fallback">{g.title.charAt(0)}</span>}
+                {g.poster ? (
+                  <img src={g.poster} alt="" draggable={false} />
+                ) : (
+                  <span className={`fc-fallback${isSoon(g) ? " is-soon" : ""}`} style={{ background: `color-mix(in srgb, ${g.accent} 72%, #000)` }}>
+                    <b>{g.title}</b>
+                    <i>{isSoon(g) ? "New game" : g.category}</i>
+                  </span>
+                )}
               </span>
               <span className="fc-grooves" aria-hidden="true" />
               <span className="fc-label" aria-hidden="true">
-                <b>{g.title}</b>
+                <b>{isSoon(g) ? "Soon" : g.title}</b>
                 <i>{g.category}</i>
-                <i>~{g.minutes} min</i>
+                {isSoon(g) ? null : <i>~{g.minutes} min</i>}
               </span>
             </>
           );
-          return pos === 0 ? (
+          return pos === 0 && !isSoon(g) ? (
             <Link key={g.id} to={`/game/${g.id}`} className={cls} aria-label={`Play ${g.title}`}>
               {disc}
             </Link>
@@ -179,8 +200,8 @@ export default function FeatureCarousel({
               key={g.id}
               type="button"
               className={cls}
-              onClick={() => go(i)}
-              aria-label={`Show ${g.title}`}
+              onClick={() => (pos === 0 ? undefined : go(i))}
+              aria-label={isSoon(g) ? "Coming soon" : `Show ${g.title}`}
               tabIndex={Math.abs(pos) === 1 ? 0 : -1}
               aria-hidden={Math.abs(pos) > 1}
             >
@@ -194,10 +215,16 @@ export default function FeatureCarousel({
         <button type="button" className="fc-btn" onClick={() => go(index - 1)} aria-label="Previous game">
           <ChevronLeft size={18} />
         </button>
-        <Link className="fc-play" to={`/game/${game.id}`}>
-          <Play size={15} />
-          Play {game.title}
-        </Link>
+        {isSoon(game) ? (
+          <span className="fc-play is-soon" aria-disabled="true">
+            Coming soon
+          </span>
+        ) : (
+          <Link className="fc-play" to={`/game/${game.id}`}>
+            <Play size={15} />
+            Play {game.title}
+          </Link>
+        )}
         <button type="button" className="fc-btn" onClick={() => go(index + 1)} aria-label="Next game">
           <ChevronRight size={18} />
         </button>

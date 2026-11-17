@@ -15,6 +15,7 @@ import { trackPageview } from "./lib/track";
 const Home3 = lazy(() => import("./pages/Home3"));
 const Home2 = lazy(() => import("./pages/Home2"));
 const GamesGlobe = lazy(() => import("./pages/GamesGlobe"));
+const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 
 /** The landing page lives outside the Shell (it has its own nav, sidebar and background). */
 function Landing({ videoHero = false }: { videoHero?: boolean }) {
@@ -61,6 +62,15 @@ export default function App() {
         <Route path="/" element={<Landing videoHero />} />
         {/* The video-hero design is now the home page */}
         <Route path="/home3" element={<Navigate to="/" replace />} />
+        {/* Full-screen carousel per category */}
+        <Route
+          path="/category/:slug"
+          element={
+            <Suspense fallback={<div style={{ minHeight: "100vh", background: "#121212" }} />}>
+              <CategoryPage />
+            </Suspense>
+          }
+        />
         {/* Full-screen draggable globe of every game */}
         <Route
           path="/games"

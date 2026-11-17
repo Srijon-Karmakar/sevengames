@@ -11,6 +11,8 @@ import Leaderboard from "../components/Leaderboard";
 import { trackGame } from "../lib/track";
 import { pushRecent } from "../lib/recent";
 import "./game-page.css";
+import "../games/game-skin.css";
+import "./game-neu.css";
 
 function GameRunner({ gameId, onScore }: { gameId: string; onScore: (score: number) => void }) {
   const Engine = engines[gameId as keyof typeof engines];
@@ -66,6 +68,29 @@ export default function GamePage() {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
   }, []);
 
+  // Guest notice can be dismissed for the session.
+  const [guestHidden, setGuestHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem("senevon:guest-note") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  // "F" toggles full screen (ignored while typing or when a game input has focus).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (full) exitFull();
+      else void enterFull();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [full, enterFull, exitFull]);
+
   useEffect(() => {
     if (id && getGame(id)) {
       trackGame("game_start", id);
@@ -105,21 +130,39 @@ export default function GamePage() {
       <header className="game-header">
         <GamePoster game={game} size="hero" />
         <div className="game-header-text">
-          <p className="game-meta">
-            {game.category} · {game.difficulty} · ~{game.minutes} min
-          </p>
           <h1>{game.title}</h1>
+          <ul className="gp-chips" aria-label="Game details">
+            <li>{game.category}</li>
+            <li>{game.difficulty}</li>
+            <li>~{game.minutes} min</li>
+            {best !== null ? <li className="gp-chip-best">Best: {best}</li> : null}
+          </ul>
           <p className="hero-sub">{game.description}</p>
         </div>
       </header>
 
-      {!user ? (
+      {!user && !guestHidden ? (
         <p className="gp-guest">
           <Info size={15} aria-hidden="true" />
           <span>
             Playing as guest — scores stay on this device.{" "}
             <Link to={`/login?next=/game/${game.id}`}>Sign in</Link> to join the global leaderboard.
           </span>
+          <button
+            type="button"
+            className="gp-guest-x"
+            aria-label="Dismiss"
+            onClick={() => {
+              setGuestHidden(true);
+              try {
+                sessionStorage.setItem("senevon:guest-note", "1");
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            ×
+          </button>
         </p>
       ) : null}
 
@@ -140,6 +183,7 @@ export default function GamePage() {
               <button type="button" className={full ? "active" : ""} aria-pressed={full} onClick={enterFull}>
                 <Maximize size={15} />
                 <span>Full screen</span>
+                <kbd className="gp-kbd" aria-hidden="true">F</kbd>
               </button>
               {game.kind === "iframe" ? (
                 <a href={game.embedUrl} target="_blank" rel="noopener noreferrer" aria-label="Open original site">

@@ -506,3 +506,140 @@
 .site[data-gtheme="dark"] .h3-rail-item:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* ============================================================
+   Game page UX pass
+   ============================================================ */
+
+/* Circular game picture with a clean ring in the game's accent colour */
+.site .gp .game-header .poster-hero {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px var(--gp-panel, #fff),
+    0 0 0 5px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 14px 30px -14px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+.site .gp .game-header .poster-hero img,
+.site .gp .game-header .poster-hero .poster-icon {
+  border-radius: 50%;
+}
+
+/* Tighter header so the game starts higher on screen */
+.site .gp .back-link {
+  margin-bottom: 10px;
+}
+
+.site .gp .game-header {
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.site .gp .game-header-text > h1 {
+  margin: 0;
+}
+
+/* Details as chips instead of a dotted line */
+.site .gp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site .gp-chips li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  background: var(--gp-seg);
+  border: 1px solid var(--gp-line, transparent);
+}
+
+.site .gp-chips .gp-chip-best {
+  color: #1a0b02;
+  background: #ff8a3d;
+  border-color: transparent;
+}
+
+/* Description follows the chips */
+.site .gp .game-header-text > .hero-sub {
+  margin-top: 8px;
+}
+
+/* Guest notice with a dismiss button */
+.site .gp-guest {
+  padding-right: 6px;
+}
+
+.site .gp-guest-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.site .gp-guest-x:hover {
+  background: rgba(244, 96, 0, 0.15);
+  color: var(--text);
+}
+
+/* Keyboard hint on the Full screen button */
+.site .gp-kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 5px;
+  font: 600 10px/1 var(--h3-mono, ui-monospace, monospace);
+  color: inherit;
+  opacity: 0.7;
+  border: 1px solid currentColor;
+}
+
+/* Leaderboard stays in view while you play (desktop) */
+@media (min-width: 861px) {
+  .site .gp .game-layout {
+    align-items: start;
+  }
+
+  .site .gp .leaderboard {
+    position: sticky;
+    top: 96px;
+  }
+}
+
+/* Phones: centred header, no keyboard hint */
+@media (max-width: 600px) {
+  .site .gp .game-header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .site .gp .game-header .poster-hero {
+    width: 84px;
+  }
+
+  .site .gp-chips {
+    justify-content: center;
+  }
+
+  .site .gp-kbd {
+    display: none;
+  }
+}

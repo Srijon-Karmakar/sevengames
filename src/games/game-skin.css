@@ -1,0 +1,348 @@
+/* ============================================================
+   Game skin: a polished, consistent look for every built-in game.
+   Scoped to the game stage so nothing else on the site changes.
+
+   Performance rules followed here:
+   - motion uses only transform / opacity (GPU-composited, no layout)
+   - no backdrop-filter or large blurs on anything that animates
+   - hover effects only on devices that can hover
+   - everything calms down under "reduce motion"
+   ============================================================ */
+
+.gp-stage {
+  --sk-accent: #ff7a1a;
+  --sk-accent-2: #ffb36b;
+  --sk-tile: #1b1d24;
+  --sk-tile-hi: #262935;
+  --sk-line: rgba(255, 255, 255, 0.08);
+  --sk-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(255, 122, 26, 0.12), transparent 60%),
+    radial-gradient(80% 60% at 50% 120%, rgba(90, 120, 255, 0.1), transparent 60%),
+    #07070b;
+}
+
+/* ---------- HUD + text ---------- */
+.gp-stage .game-surface {
+  max-width: 460px;
+  gap: 16px;
+  animation: sk-in 0.5s var(--sk-ease) both;
+}
+
+@keyframes sk-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.gp-stage .game-status {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f4f4f7;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--sk-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-variant-numeric: tabular-nums;
+}
+
+.gp-stage .game-prompt {
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.gp-stage .game-prompt.big {
+  background: linear-gradient(180deg, #fff, #ffd2ae);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- Buttons ---------- */
+.gp-stage .primary-btn {
+  position: relative;
+  min-width: 140px;
+  padding: 12px 28px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #1a0b02;
+  background: linear-gradient(180deg, #ffb06a, #ff7a1a 55%, #f25f00);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.18),
+    0 10px 24px -8px rgba(255, 110, 20, 0.7);
+  transition: transform 0.18s var(--sk-ease), box-shadow 0.18s ease;
+}
+
+.gp-stage .primary-btn:active:not(:disabled) {
+  transform: translateY(2px) scale(0.98);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 4px 12px -6px rgba(255, 110, 20, 0.7);
+}
+
+.gp-stage .ghost-btn {
+  border-radius: 999px;
+  border: 1px solid var(--sk-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e9e9ee;
+  transition: transform 0.15s var(--sk-ease), background 0.2s ease;
+}
+
+.gp-stage .ghost-btn:active {
+  transform: scale(0.96);
+}
+
+.gp-stage .ghost-btn.active {
+  background: rgba(255, 122, 26, 0.18);
+  border-color: rgba(255, 122, 26, 0.5);
+  color: #ffb36b;
+}
+
+/* ---------- Canvas arcade frame ---------- */
+.gp-stage .arcade-frame,
+.gp-stage .arcade-canvas,
+.gp-stage .snake-stage {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.02),
+    0 24px 60px -24px rgba(0, 0, 0, 0.9),
+    0 0 60px -20px rgba(255, 122, 26, 0.25);
+  overflow: hidden;
+  display: block;
+}
+
+.gp-stage .snake-stage canvas,
+.gp-stage canvas.arcade-canvas {
+  display: block;
+  height: auto;
+}
+
+/* ---------- Shared tile look (boards & puzzles) ---------- */
+.gp-stage .cell-btn,
+.gp-stage .memory-card,
+.gp-stage .light,
+.gp-stage .mine-cell,
+.gp-stage .mole-hole,
+.gp-stage .merge-tile,
+.gp-stage .slide-tile,
+.gp-stage .key-btn,
+.gp-stage .answer-btn,
+.gp-stage .color-tile,
+.gp-stage .simon-pad {
+  border-radius: 14px;
+  transition:
+    transform 0.16s var(--sk-ease),
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gp-stage .cell-btn,
+.gp-stage .memory-card,
+.gp-stage .mine-cell,
+.gp-stage .mole-hole,
+.gp-stage .slide-tile,
+.gp-stage .key-btn,
+.gp-stage .answer-btn,
+.gp-stage .light {
+  border: 1px solid var(--sk-line);
+  background: linear-gradient(180deg, var(--sk-tile-hi), var(--sk-tile));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 6px 14px -8px rgba(0, 0, 0, 0.8);
+  color: #f1f1f5;
+}
+
+/* press feedback on every tile */
+.gp-stage .cell-btn:active:not(:disabled),
+.gp-stage .memory-card:active,
+.gp-stage .mine-cell:active,
+.gp-stage .mole-hole:active,
+.gp-stage .slide-tile:active,
+.gp-stage .key-btn:active:not(:disabled),
+.gp-stage .answer-btn:active:not(:disabled),
+.gp-stage .light:active,
+.gp-stage .color-tile:active,
+.gp-stage .simon-pad:not(:disabled):active {
+  transform: scale(0.94);
+}
+
+@media (hover: hover) {
+  .gp-stage .cell-btn:hover:not(:disabled),
+  .gp-stage .memory-card:not(.visible):hover,
+  .gp-stage .mine-cell:not(.revealed):hover,
+  .gp-stage .slide-tile:not(.empty):hover,
+  .gp-stage .key-btn:hover:not(:disabled),
+  .gp-stage .answer-btn:hover:enabled {
+    transform: translateY(-2px);
+    border-color: rgba(255, 122, 26, 0.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 10px 22px -10px rgba(255, 122, 26, 0.55);
+  }
+}
+
+/* ---------- Game-specific touches ---------- */
+
+/* Tic-tac-toe / board cells: bold glowing marks */
+.gp-stage .cell-btn {
+  font-size: 34px;
+  font-weight: 800;
+  text-shadow: 0 0 18px rgba(255, 140, 60, 0.55);
+}
+
+/* Memory: card flip */
+.gp-stage .memory-card {
+  transform-style: preserve-3d;
+}
+
+.gp-stage .memory-card.visible {
+  background: linear-gradient(160deg, #ffb06a, #ff7a1a);
+  color: #1a0b02;
+  border-color: transparent;
+  box-shadow: 0 10px 24px -10px rgba(255, 122, 26, 0.7);
+  animation: sk-flip 0.35s var(--sk-ease);
+}
+
+@keyframes sk-flip {
+  from {
+    transform: rotateY(90deg);
+  }
+}
+
+/* Lights Out: lit cells glow */
+.gp-stage .light.on {
+  background: radial-gradient(circle at 50% 40%, #fff6c9, #ffcf3d 55%, #ff9d00);
+  border-color: transparent;
+  box-shadow:
+    0 0 22px rgba(255, 200, 60, 0.6),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* Minesweeper */
+.gp-stage .mine-cell {
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.gp-stage .mine-cell.revealed {
+  background: #0f1015;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Whack-a-mole: holes + popping mole */
+.gp-stage .mole-hole {
+  background: radial-gradient(ellipse at 50% 70%, #050506 40%, #1f1a17 70%, #2c241e);
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+
+.gp-stage .mole-hole.active {
+  background: radial-gradient(circle at 50% 42%, #ffd2a8 0 18%, #c27a45 19% 42%, #050506 43% 55%, #2c241e 70%);
+  animation: sk-pop 0.22s var(--sk-ease);
+  box-shadow: 0 0 26px -6px rgba(255, 150, 70, 0.7);
+}
+
+@keyframes sk-pop {
+  from {
+    transform: scale(0.82);
+  }
+}
+
+/* 2048-style merge tiles pop when they appear / merge */
+.gp-stage .merge-board {
+  border-radius: 18px;
+  background: #121318;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.gp-stage .merge-tile {
+  border-radius: 12px;
+}
+
+.gp-stage .merge-tile.filled {
+  animation: sk-pop 0.18s var(--sk-ease);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 6px 16px -8px rgba(0, 0, 0, 0.7);
+}
+
+/* Simon pads glow when lit */
+.gp-stage .simon-pad {
+  border: 0;
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.25), 0 10px 26px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* Colour match tiles */
+.gp-stage .color-tile {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 10px 24px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* Sliding puzzle */
+.gp-stage .slide-tile {
+  font-weight: 800;
+  font-size: 22px;
+}
+
+.gp-stage .slide-tile.empty {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+/* Quiz / maths answers */
+.gp-stage .answer-btn.correct {
+  background: linear-gradient(180deg, #3ee08a, #19b765);
+  border-color: transparent;
+  color: #052814;
+  animation: sk-pop 0.22s var(--sk-ease);
+}
+
+.gp-stage .answer-btn.wrong {
+  background: linear-gradient(180deg, #ff6b81, #e5384f);
+  border-color: transparent;
+  color: #2b040a;
+  animation: sk-shake 0.32s ease;
+}
+
+@keyframes sk-shake {
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+/* Timer bars */
+.gp-stage .timer-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.gp-stage .timer-fill {
+  background: linear-gradient(90deg, #ff7a1a, #ffd36b);
+  box-shadow: 0 0 12px rgba(255, 140, 40, 0.6);
+}
+
+/* ---------- Reduce motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .gp-stage *,
+  .gp-stage .game-surface {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

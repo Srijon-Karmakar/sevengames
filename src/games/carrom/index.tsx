@@ -10,7 +10,6 @@ import {
   applySnapshot,
   baselineFor,
   clamp,
-  dist,
   makeWorld,
   minDirFor,
   placeStriker,
@@ -19,8 +18,10 @@ import {
   scoreForSeat,
   settled,
   shootStriker,
+  skipTurn,
   snapshotOf,
   stepPhysics,
+  tickSinks,
   type LivePos,
   type Player,
   type SeatKind,
@@ -30,21 +31,31 @@ import {
 } from "./engine";
 import { planCpuShot, type CpuPlan } from "./cpu";
 import {
+  CarromFx,
   drawAim,
   drawBaselineGlow,
   drawBoard,
   drawCoin,
+  drawPullBand,
   drawSeatLabels,
   drawSinks,
   drawStriker,
+  drawTurnTimer,
   seatRingColor,
 } from "./render";
 import { CarromNet, type NetStatus, type RosterEntry } from "./online";
+import { useAuthContext } from "../../context/AuthContext";
+import { carromAudio } from "./audio";
+import { STRIKERS, type StrikerSkin } from "./skins";
+import { matchXp, useCarromProgress } from "./progress";
+import CarromLocker, { LevelBar } from "./Locker";
+import "./carrom.css";
 
 type Mode = "cpu" | "local2" | "local4" | "host2" | "host4" | "join";
 
 type Phase =
   | "menu"
+  | "locker"
   | "join-form"
   | "net-lobby"
   | "place"
@@ -55,15 +66,28 @@ type Phase =
 
 const LOCAL_MODES: Mode[] = ["cpu", "local2", "local4"];
 
+/** Time each player gets to place and shoot. */
+const TURN_SECONDS = 15;
+const TURN_MS = TURN_SECONDS * 1000;
+
 export default function CarromGame({ onFinish }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef<World | null>(null);
   const phaseRef = useRef<Phase>("menu");
-  const aimRef = useRef<{ dir: { x: number; y: number }; power: number }>({
+  // valid = the aim points into the board (you can't shoot back towards your own edge)
+  const aimRef = useRef<{ dir: { x: number; y: number }; power: number; valid: boolean }>({
     dir: { x: 0, y: -1 },
     power: 0.65,
+    valid: true,
   });
-  const dragRef = useRef<{ mode: "aim" | "place"; ax: number; ay: number } | null>(null);
+  // Pull-back aiming: you press anywhere on the board and drag away from where you want to shoot.
+  const dragRef = useRef<{ mode: "aim"; ax: number; ay: number } | null>(null);
+  // Turn clock (0 = not running)
+  const deadlineRef = useRef(0);
+  const lastSecRef = useRef(-1);
+  const timeoutRef = useRef<() => void>(() => {});
+  const slidingRef = useRef(false);
+  const lastScrapeRef = useRef(0);
   const cpuPlanRef = useRef<CpuPlan | null>(null);
   const shotStartRef = useRef(0);
   const finishedRef = useRef(false);
@@ -74,6 +98,16 @@ export default function CarromGame({ onFinish }: GameProps) {
   const finishShotRef = useRef<() => void>(() => {});
   const fireRef = useRef<(dir: { x: number; y: number }, power: number) => void>(() => {});
   const drawRef = useRef<() => void>(() => {});
+  const fxRef = useRef(new CarromFx());
+  const lastShotRef = useRef(0);
+  const frameDtRef = useRef(0.016);
+
+  const auth = useAuthContext();
+  const prog = useCarromProgress(auth.user);
+  const progRef = useRef(prog);
+  progRef.current = prog;
+  const [muted, setMuted] = useState(carromAudio.muted);
+  const [reward, setReward] = useState<{ xp: number; before: number; after: number; unlocked: string[] } | null>(null);
 
   const [screen, setScreen] = useState<Phase>("menu");
   const [message, setMessage] = useState("Pick a mode to play.");
@@ -88,9 +122,19 @@ export default function CarromGame({ onFinish }: GameProps) {
   const [roomSeats, setRoomSeats] = useState<Seats>(2);
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [isHost, setIsHost] = useState(false);
+  const [secsLeft, setSecsLeft] = useState(TURN_SECONDS);
+  const [placeT, setPlaceT] = useState(500);
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
+    // every new turn (or extra shot) starts a fresh clock
+    if (p === "place") {
+      deadlineRef.current = performance.now() + TURN_MS;
+      lastSecRef.current = -1;
+      setSecsLeft(TURN_SECONDS);
+    } else {
+      deadlineRef.current = 0;
+    }
     setScreen(p);
   }, []);
 
@@ -121,6 +165,20 @@ export default function CarromGame({ onFinish }: GameProps) {
     [setPhase],
   );
 
+  /** XP for the local player at the end of a match (vs CPU and online only). */
+  const awardXp = useCallback((world: World) => {
+    const mode = modeRef.current;
+    if (mode === "local2" || mode === "local4") return;
+    const myColor = world.players[mySeatRef.current]?.color;
+    if (!myColor) return;
+    const coins = world.potted[myColor].length;
+    const queen = world.queen.state === "owned" && world.queen.color === myColor;
+    const won = world.result?.winner === myColor;
+    const xp = matchXp(coins, queen, won);
+    const res = progRef.current.addXp(xp);
+    setReward({ xp, ...res });
+  }, []);
+
   const finishShot = useCallback(() => {
     const world = worldRef.current;
     if (!world) return;
@@ -138,6 +196,7 @@ export default function CarromGame({ onFinish }: GameProps) {
       if (!finishedRef.current) {
         finishedRef.current = true;
         onFinish(score);
+        awardXp(world);
       }
       if (netRef.current && modeRef.current.startsWith("host")) {
         netRef.current.broadcastSnapshot(snapshotOf(world));
@@ -152,12 +211,39 @@ export default function CarromGame({ onFinish }: GameProps) {
     const turn = world.turn;
     setTurnName(world.players[turn].name);
     setPhase(world.players[turn].kind === "cpu" ? "cpu" : "place");
-  }, [onFinish, queenTextOf, setPhase]);
+  }, [onFinish, queenTextOf, setPhase, awardXp]);
+
+  /** The turn clock ran out. A shot already being pulled back is released; otherwise the turn passes. */
+  const timeoutTurn = useCallback(() => {
+    const world = worldRef.current;
+    if (!world || phaseRef.current !== "place") return;
+    const aim = aimRef.current;
+    if (dragRef.current && aim.power >= 0.05 && aim.valid) {
+      dragRef.current = null;
+      fireRef.current(aim.dir, aim.power);
+      if ((phaseRef.current as Phase) === "shooting") return; // fire() just changed it
+    }
+    dragRef.current = null;
+    aim.power = 0;
+    const name = world.players[world.turn].name;
+    skipTurn(world);
+    carromAudio.timeout();
+    const msg = `${name} ran out of time — turn passes.`;
+    setMessage(msg);
+    setQueenText(queenTextOf(world));
+    setTurnName(world.players[world.turn].name);
+    if (netRef.current && modeRef.current.startsWith("host")) {
+      netRef.current.broadcastSnapshot(snapshotOf(world));
+      netRef.current.broadcastMsg(msg);
+    }
+    setPhase(world.players[world.turn].kind === "cpu" ? "cpu" : "place");
+  }, [queenTextOf, setPhase]);
 
   useEffect(() => {
     finishShotRef.current = finishShot;
     fireRef.current = fire;
-  }, [finishShot, fire]);
+    timeoutRef.current = timeoutTurn;
+  }, [finishShot, fire, timeoutTurn]);
 
   /* ============ main loop ============ */
 
@@ -169,7 +255,15 @@ export default function CarromGame({ onFinish }: GameProps) {
       raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+      frameDtRef.current = dt;
       const world = worldRef.current;
+      // A new shot was fired (by anyone: you, CPU, a remote player): play the strike animation.
+      if (world && world.shotCount !== lastShotRef.current) {
+        lastShotRef.current = world.shotCount;
+        const st = world.striker;
+        const sp = Math.hypot(st.vx, st.vy);
+        if (sp > 0) fxRef.current.strike(st.x, st.y, { x: st.vx / sp, y: st.vy / sp }, Math.min(1, (sp - 420) / 1620));
+      }
 
       if (world && phaseRef.current === "shooting") {
         acc += dt;
@@ -193,12 +287,40 @@ export default function CarromGame({ onFinish }: GameProps) {
               .map((d) => [d.id, Math.round(d.x), Math.round(d.y)] as LivePos),
           );
         }
-        if (settled(world)) {
+        fxRef.current.consume(world.events);
+        // powder hiss follows how much is moving
+        let moving = 0;
+        for (const d of world.discs) if (d.alive) moving += Math.hypot(d.vx, d.vy);
+        carromAudio.slide(moving);
+        slidingRef.current = true;
+        // wait for coins still dropping into pockets before resolving the shot
+        if (settled(world) && world.sinks.length === 0) {
           acc = 0;
           finishShotRef.current();
         }
       } else {
         acc = 0;
+        if (slidingRef.current) {
+          slidingRef.current = false;
+          carromAudio.slide(0);
+        }
+      }
+      if (world) tickSinks(world, dt);
+
+      // turn clock
+      if (world && phaseRef.current === "place" && deadlineRef.current > 0) {
+        const left = deadlineRef.current - now;
+        const secs = Math.max(0, Math.ceil(left / 1000));
+        if (secs !== lastSecRef.current) {
+          lastSecRef.current = secs;
+          setSecsLeft(secs);
+          if (secs > 0 && secs <= 5) carromAudio.tick(secs <= 3);
+        }
+        if (left <= 0) {
+          deadlineRef.current = 0;
+          // the host (or the local device) decides; online guests wait for the host's snapshot
+          if (modeRef.current !== "join") timeoutRef.current();
+        }
       }
       drawRef.current();
     };
@@ -242,8 +364,11 @@ export default function CarromGame({ onFinish }: GameProps) {
   /* ============ local games ============ */
 
   function startLocal(mode: "cpu" | "local2" | "local4") {
+    carromAudio.unlock();
     modeRef.current = mode;
+    mySeatRef.current = 0;
     finishedRef.current = false;
+    setReward(null);
     netRef.current?.leave();
     netRef.current = null;
     const players: Array<{ name: string; kind: "human" | "cpu" }> =
@@ -272,13 +397,14 @@ export default function CarromGame({ onFinish }: GameProps) {
     aimRef.current = {
       dir: { ...minDirFor(0, world.seats) },
       power: 0.65,
+      valid: true,
     };
     setMessage(
       mode === "local4"
         ? "Teams: P1+P3 (white) vs P2+P4 (black). P1 breaks!"
         : mode === "local2"
           ? "Pass the device — Player 1 (white) breaks!"
-          : "Break! Pull back from the striker to aim, release to shoot.",
+          : "Break! Slide to place the striker, then pull back and release to shoot.",
     );
     setPhase("place");
   }
@@ -300,6 +426,7 @@ export default function CarromGame({ onFinish }: GameProps) {
       },
       onStart: (cfg: { seats: Seats; players: Array<{ name: string; kind: "human" | "cpu" }> }) => {
         finishedRef.current = false;
+        setReward(null);
         const players = cfg.players.map((p, i): { seat: number; name: string; kind: SeatKind } => ({
           seat: i,
           name: p.name,
@@ -314,6 +441,7 @@ export default function CarromGame({ onFinish }: GameProps) {
         aimRef.current = {
           dir: { ...minDirFor(0, world.seats) },
           power: 0.65,
+          valid: true,
         };
         setMessage("Game on — good luck!");
         setPhase("place");
@@ -331,6 +459,7 @@ export default function CarromGame({ onFinish }: GameProps) {
           if (!finishedRef.current) {
             finishedRef.current = true;
             onFinish(score);
+            awardXp(world);
           }
           return;
         }
@@ -345,10 +474,11 @@ export default function CarromGame({ onFinish }: GameProps) {
       },
       onMessage: (text: string) => setMessage(text),
     }),
-    [onFinish, queenTextOf, setPhase],
+    [onFinish, queenTextOf, setPhase, awardXp],
   );
 
   function hostRoom(seats: Seats) {
+    carromAudio.unlock();
     netRef.current?.leave();
     finishedRef.current = false;
     setIsHost(true);
@@ -363,6 +493,7 @@ export default function CarromGame({ onFinish }: GameProps) {
   }
 
   function joinRoom() {
+    carromAudio.unlock();
     netRef.current?.leave();
     finishedRef.current = false;
     setIsHost(false);
@@ -443,52 +574,38 @@ export default function CarromGame({ onFinish }: GameProps) {
     };
   };
 
+  /** Unit vector pointing into the board from the current seat. */
+  const inwardOf = (world: World) => {
+    const m = minDirFor(world.turn, world.seats);
+    const l = Math.hypot(m.x, m.y) || 1;
+    return { x: m.x / l, y: m.y / l };
+  };
+
   function onPointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
+    carromAudio.unlock();
     if (!canControl()) return;
-    const world = worldRef.current!;
-    const bl = baselineFor(world.turn, world.seats);
+    // Press anywhere on the board, pull back away from your target, release to shoot.
     const p = toWorld(e);
-    const s = world.striker;
-    const nearStriker = dist(p, s) < 60;
-    const nearBaseline =
-      bl.axis === "h"
-        ? Math.abs(p.y - bl.at) < 70 && p.x > bl.min - 40 && p.x < bl.max + 40
-        : Math.abs(p.x - bl.at) < 70 && p.y > bl.min - 40 && p.y < bl.max + 40;
-    if (nearStriker) {
-      dragRef.current = { mode: "aim", ax: s.x, ay: s.y };
-      aimRef.current.power = 0;
-    } else if (nearBaseline) {
-      dragRef.current = { mode: "place", ax: p.x, ay: p.y };
-    } else {
-      dragRef.current = { mode: "aim", ax: p.x, ay: p.y };
-      aimRef.current.power = 0;
-    }
+    dragRef.current = { mode: "aim", ax: p.x, ay: p.y };
+    aimRef.current.power = 0;
+    aimRef.current.valid = true;
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
     const drag = dragRef.current;
     if (!drag || phaseRef.current !== "place") return;
+    const world = worldRef.current;
+    if (!world) return;
     const p = toWorld(e);
-    if (drag.mode === "place") {
-      const world = worldRef.current!;
-      const bl = baselineFor(world.turn, world.seats);
-      const t = bl.axis === "h" ? p.x : p.y;
-      placeStriker(world, world.turn, t);
-      if (netRef.current && modeRef.current === "join") {
-        const now = performance.now();
-        if (now - lastPlaceRef.current > 120) {
-          lastPlaceRef.current = now;
-          netRef.current.sendPlace(world.turn, t);
-        }
-      }
-      return;
-    }
     const dx = drag.ax - p.x;
     const dy = drag.ay - p.y;
     const pull = Math.hypot(dx, dy);
     if (pull > 20) {
-      aimRef.current.dir = { x: dx / pull, y: dy / pull };
+      const dir = { x: dx / pull, y: dy / pull };
+      const inward = inwardOf(world);
+      aimRef.current.dir = dir;
+      aimRef.current.valid = dir.x * inward.x + dir.y * inward.y > 0.05;
       aimRef.current.power = clamp((pull - 30) / 380, 0.05, 1);
       setPowerN(aimRef.current.power);
     }
@@ -498,20 +615,74 @@ export default function CarromGame({ onFinish }: GameProps) {
     const drag = dragRef.current;
     dragRef.current = null;
     if (!drag || phaseRef.current !== "place") return;
-    if (drag.mode === "aim") {
-      const { dir, power } = aimRef.current;
-      if (power >= 0.05) fireRef.current(dir, power);
-    } else if (netRef.current && modeRef.current === "join") {
-      const world = worldRef.current;
-      if (world) netRef.current.sendPlace(world.turn, world.strikerT[world.turn] ?? 500);
+    const { dir, power, valid } = aimRef.current;
+    if (power < 0.05) {
+      setMessage("Press on the board and pull back (away from your target), then let go to shoot.");
+      return;
     }
+    if (!valid) {
+      aimRef.current.power = 0;
+      setMessage("Aim into the board — pull back towards your own edge to shoot forward.");
+      return;
+    }
+    fireRef.current(dir, power);
   }
+
+  /** Move the striker along your baseline (slider, or A / D keys). */
+  const moveStriker = useCallback(
+    (t: number) => {
+      const world = worldRef.current;
+      if (!world || !canControl()) return;
+      const bl = baselineFor(world.turn, world.seats);
+      const c = clamp(t, bl.min, bl.max);
+      placeStriker(world, world.turn, c);
+      setPlaceT(c);
+      const now = performance.now();
+      if (now - lastScrapeRef.current > 70) {
+        lastScrapeRef.current = now;
+        carromAudio.scrape(world.striker.x);
+      }
+      if (netRef.current && modeRef.current === "join" && now - lastPlaceRef.current > 120) {
+        lastPlaceRef.current = now;
+        netRef.current.sendPlace(world.turn, c);
+      }
+    },
+    [canControl],
+  );
+
+  /** Online guest: make sure the host gets the final striker position. */
+  const commitPlace = useCallback(() => {
+    const world = worldRef.current;
+    if (world && netRef.current && modeRef.current === "join") {
+      netRef.current.sendPlace(world.turn, world.strikerT[world.turn] ?? 500);
+    }
+  }, []);
+
+  /* slider follows the striker whenever a turn starts; your-turn cue */
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!world || screen !== "place") return;
+    setPlaceT(Math.round(world.strikerT[world.turn] ?? 500));
+    if (canControl()) carromAudio.turn();
+  }, [screen, turnName, canControl]);
 
   /* keyboard aiming */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (phaseRef.current !== "place" || !canControl()) return;
       const aim = aimRef.current;
+      // While the striker slider has focus it keeps only its own movement keys (← → Home End …);
+      // Space / Enter (shoot) and ↑ ↓ (power) still reach the game.
+      const tgt = e.target as HTMLElement | null;
+      const onSlider = tgt instanceof HTMLInputElement && tgt.type === "range";
+      if (onSlider && !["ArrowUp", "ArrowDown", " ", "Enter"].includes(e.key)) return;
+      if (e.key === "a" || e.key === "A" || e.key === "d" || e.key === "D") {
+        const world = worldRef.current;
+        if (!world) return;
+        e.preventDefault();
+        moveStriker((world.strikerT[world.turn] ?? 500) + (e.key.toLowerCase() === "a" ? -12 : 12));
+        return;
+      }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
         const a = Math.atan2(aim.dir.y, aim.dir.x) + (e.key === "ArrowLeft" ? -0.035 : 0.035);
@@ -528,12 +699,13 @@ export default function CarromGame({ onFinish }: GameProps) {
         if (aim.dir.x * inward.x + aim.dir.y * inward.y < 0) {
           aim.dir = { x: -aim.dir.x, y: -aim.dir.y };
         }
+        aim.valid = true;
         fireRef.current(aim.dir, aim.power);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canControl]);
+  }, [canControl, moveStriker]);
 
   /* flip aim inward whenever the turn changes to a controllable seat */
   useEffect(() => {
@@ -555,6 +727,19 @@ export default function CarromGame({ onFinish }: GameProps) {
     if (!ctx) return;
     const scale = canvas.width / SIZE;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.fillStyle = "#120a05";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    fxRef.current.applyShake(ctx, frameDtRef.current);
+
+    const p = progRef.current;
+    const coinSet = p.coinSet;
+    // Your chosen striker on your own turns (all local humans share this device); classic for CPU / remote players.
+    const turnKind = world.players[world.turn]?.kind;
+    const mine =
+      turnKind === "human" &&
+      (modeRef.current === "local2" || modeRef.current === "local4" || world.turn === mySeatRef.current);
+    const skin: StrikerSkin = mine ? p.striker : STRIKERS[0];
 
     drawBoard(ctx);
     const ph = phaseRef.current;
@@ -562,24 +747,43 @@ export default function CarromGame({ onFinish }: GameProps) {
       drawBaselineGlow(ctx, world, world.turn);
     }
 
-    drawSinks(ctx, world);
+    drawSinks(ctx, world, coinSet, skin);
     for (const d of world.discs) {
       if (!d.alive || d.kind === "striker") continue;
-      drawCoin(ctx, d);
+      drawCoin(ctx, d, coinSet);
     }
 
     const aim = aimRef.current;
     if (ph === "place" && canControl() && aim.power > 0.03) {
-      drawAim(ctx, world.striker, aim.dir, aim.power, "rgba(31,92,180,0.85)");
+      drawAim(ctx, world.striker, aim.dir, aim.power, aim.valid ? "rgba(31,92,180,0.85)" : "rgba(200,40,30,0.85)");
+      if (dragRef.current) drawPullBand(ctx, world.striker, aim.dir, aim.power, aim.valid);
     }
     if (ph === "cpu-aim" && cpuPlanRef.current) {
       drawAim(ctx, world.striker, cpuPlanRef.current.dir, cpuPlanRef.current.power, "rgba(180,50,40,0.85)");
     }
 
     if (world.striker.alive) {
-      const pulse = ph === "place" && canControl() ? 0.5 + 0.5 * Math.sin(performance.now() / 280) : 0;
-      drawStriker(ctx, world.striker, seatRingColor(world.turn), pulse, ph === "place");
+      const aiming = ph === "place" && canControl();
+      const pulse = aiming ? 0.5 + 0.5 * Math.sin(performance.now() / 280) : 0;
+      // while you pull back to aim, the striker visibly cocks backwards
+      const pull = aiming && dragRef.current?.mode === "aim" ? aim.power : 0;
+      const cpuPull = ph === "cpu-aim" && cpuPlanRef.current ? cpuPlanRef.current.power : 0;
+      drawStriker(
+        ctx,
+        world.striker,
+        skin,
+        seatRingColor(world.turn),
+        pulse,
+        ph === "place" || ph === "cpu-aim",
+        pull || cpuPull,
+        ph === "cpu-aim" && cpuPlanRef.current ? cpuPlanRef.current.dir : aim.dir,
+      );
+      if (ph === "place" && deadlineRef.current > 0) {
+        drawTurnTimer(ctx, world.striker, (deadlineRef.current - performance.now()) / TURN_MS);
+      }
     }
+    fxRef.current.draw(ctx, frameDtRef.current);
+    ctx.restore();
     const mySeat =
       modeRef.current === "join" || modeRef.current.startsWith("host") ? mySeatRef.current : null;
     drawSeatLabels(ctx, world, mySeat);
@@ -601,6 +805,10 @@ export default function CarromGame({ onFinish }: GameProps) {
         </p>
         {screen === "menu" ? (
           <div className="carrom-menu">
+            <button type="button" className="carrom-profile" onClick={() => setPhase("locker")}>
+              <LevelBar level={prog.level} xp={prog.progress.xp} pro={prog.pro} compact />
+              <span className="carrom-profile-cta">Customize ›</span>
+            </button>
             <button type="button" className="primary-btn" onClick={() => startLocal("cpu")}>
               Single player vs CPU
             </button>
@@ -656,6 +864,14 @@ export default function CarromGame({ onFinish }: GameProps) {
             </button>
           </form>
         )}
+      </div>
+    );
+  }
+
+  if (screen === "locker") {
+    return (
+      <div className="game-surface carrom-surface">
+        <CarromLocker prog={prog} signedIn={Boolean(auth.user)} onBack={() => setPhase("menu")} />
       </div>
     );
   }
@@ -739,15 +955,49 @@ export default function CarromGame({ onFinish }: GameProps) {
         </div>
       </div>
 
-      <p className="game-status">
-        {screen === "over" ? message : `${turnName}'s turn — ${message}`}
-      </p>
+      <div className="carrom-statusrow">
+        <p className="game-status">{screen === "over" ? message : `${turnName}'s turn — ${message}`}</p>
+        {screen === "place" ? (
+          <span
+            className={`carrom-timer${secsLeft <= 5 ? " warn" : ""}`}
+            role="timer"
+            aria-label={`${secsLeft} seconds left`}
+            style={{ "--left": secsLeft / TURN_SECONDS } as React.CSSProperties}
+          >
+            <i aria-hidden="true" />
+            {secsLeft}s
+          </span>
+        ) : null}
+        <button
+          type="button"
+          className="carrom-mute"
+          aria-pressed={muted}
+          aria-label={muted ? "Turn sound on" : "Mute sound"}
+          title={muted ? "Sound off" : "Sound on"}
+          onClick={() => {
+            carromAudio.unlock();
+            carromAudio.setMuted(!muted);
+            setMuted(!muted);
+          }}
+        >
+          {muted ? "🔇" : "🔊"}
+        </button>
+      </div>
+
+      {screen === "over" && reward ? (
+        <div className="carrom-reward" role="status">
+          <b>+{reward.xp} XP</b>
+          {reward.after > reward.before ? <span className="carrom-levelup">Level up! Level {reward.after}</span> : null}
+          <LevelBar level={prog.level} xp={prog.progress.xp} pro={prog.pro} />
+          {reward.unlocked.length ? <p className="carrom-unlocked">Unlocked: {reward.unlocked.join(", ")}</p> : null}
+        </div>
+      ) : null}
 
       <div className="carrom-stage">
         <canvas
           ref={canvasRef}
-          width={720}
-          height={720}
+          width={1080}
+          height={1080}
           aria-label="Carrom board"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -755,6 +1005,38 @@ export default function CarromGame({ onFinish }: GameProps) {
           onPointerCancel={onPointerUp}
         />
       </div>
+
+      {(() => {
+        const bl = baselineFor(world.turn, world.seats);
+        const controllable = screen === "place" && canControl();
+        return (
+          <label className={`carrom-place${controllable ? "" : " is-off"}`}>
+            <span className="carrom-place-end" aria-hidden="true">
+              {bl.axis === "h" ? "◀" : "▲"}
+            </span>
+            <input
+              type="range"
+              min={bl.min}
+              max={bl.max}
+              step={1}
+              value={placeT}
+              disabled={!controllable}
+              aria-label="Striker position on your baseline"
+              onChange={(e) => moveStriker(Number(e.target.value))}
+              onPointerDown={() => carromAudio.unlock()}
+              onPointerUp={(e) => {
+                commitPlace();
+                // hand the keyboard back to the game (arrows aim, Space shoots)
+                e.currentTarget.blur();
+              }}
+              onKeyUp={commitPlace}
+            />
+            <span className="carrom-place-end" aria-hidden="true">
+              {bl.axis === "h" ? "▶" : "▼"}
+            </span>
+          </label>
+        );
+      })()}
 
       <div className="carrom-power">
         <div className="carrom-power-fill" style={{ width: `${Math.round(powerN * 100)}%` }} />
@@ -774,6 +1056,11 @@ export default function CarromGame({ onFinish }: GameProps) {
         >
           {isOnline ? "Back to menu" : "Play again"}
         </button>
+      ) : null}
+      {screen === "over" ? (
+        <button type="button" className="ghost-btn" onClick={() => (isOnline ? leaveNet() : setPhase("locker"))}>
+          {isOnline ? "Leave" : "Customize striker & coins"}
+        </button>
       ) : (
         <button
           type="button"
@@ -788,8 +1075,8 @@ export default function CarromGame({ onFinish }: GameProps) {
       )}
 
       <p className="carrom-hint">
-        Drag the striker to move it · pull back to aim · release to shoot · arrow keys fine-tune,
-        space shoots
+        Slide to place the striker (or A / D) · pull back anywhere on the board to aim · release to
+        shoot · {TURN_SECONDS}s per turn · arrow keys fine-tune, space shoots
       </p>
     </div>
   );

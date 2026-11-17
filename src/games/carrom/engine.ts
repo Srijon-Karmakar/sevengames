@@ -25,14 +25,39 @@ export type Disc = {
   r: number;
   m: number;
   alive: boolean;
+  /** visual rotation (rad) and spin (rad/s): coins turn when struck off-centre or scrape a wall */
+  a: number;
+  w: number;
 };
+
+/** Things that happened this frame, for sounds and visual effects (consumed by the renderer). */
+export type FxEvent =
+  | { type: "hit"; x: number; y: number; s: number; striker: boolean }
+  | { type: "wall"; x: number; y: number; s: number }
+  | { type: "pot"; x: number; y: number; px: number; py: number; s: number; kind: Kind }
+  | { type: "rattle"; x: number; y: number; s: number };
 
 export type QueenPhase =
   | { state: "board" }
   | { state: "pending"; seat: number }
   | { state: "owned"; color: SeatColor };
 
-export type Sink = { x: number; y: number; kind: Kind; t: number };
+/** A disc dropping into a pocket: carries on along (dx,dy) into the pocket centre, tips over the
+ *  edge and falls into the net. `sp` is its speed when captured. */
+export type Sink = {
+  x: number;
+  y: number;
+  px: number;
+  py: number;
+  dx: number;
+  dy: number;
+  sp: number;
+  kind: Kind;
+  t: number;
+  a: number;
+  w: number;
+};
+export const SINK_T = 0.75;
 export type Shot = { potted: Disc[]; strikerPotted: boolean; contact: boolean };
 
 export type World = {
@@ -47,6 +72,7 @@ export type World = {
   strikerT: Record<number, number>; // along-baseline coordinate per seat
   shot: Shot;
   sinks: Sink[];
+  events: FxEvent[];
   shotCount: number;
   result: { winner: SeatColor } | null;
 };
@@ -75,11 +101,20 @@ export const POCKETS = [
 export const BASE_MIN = 218;
 export const BASE_MAX = 782;
 export const BASE_OFF = 44;
-const FRICTION_K = 1.35;
-const FRICTION_LIN = 26;
+// Friction: a powdered carrom board behaves mostly like constant sliding friction (mu*g), plus a
+// little speed-proportional drag. Coins slow steadily and stop crisply, as on a real board.
+const FRICTION_K = 1.05;
+const FRICTION_LIN = 46;
 const STOP_SPEED = 7;
-const WALL_E = 0.72;
-const DISC_E = 0.94;
+// Rubber-lined frame: bounces lose more energy the harder they hit.
+const WALL_E_SOFT = 0.78;
+const WALL_E_HARD = 0.62;
+const DISC_E = 0.93;
+/** Coin-on-coin surface friction: glancing hits transfer spin and a little sideways push. */
+const DISC_MU = 0.06;
+/** Coins hitting a pocket's jaw faster than this can rattle out instead of dropping. */
+const RATTLE_SPEED = 1650;
+const SPIN_DRAG = 2.2;
 export const SUB = 1 / 240;
 export const MIN_POWER_SPEED = 420;
 export const MAX_POWER_SPEED = 2040;
@@ -158,7 +193,7 @@ export function resetIds() {
 }
 
 function makeCoin(kind: Kind, x: number, y: number): Disc {
-  return { id: nextId++, kind, x, y, vx: 0, vy: 0, r: COIN_R, m: COIN_M, alive: true };
+  return { id: nextId++, kind, x, y, vx: 0, vy: 0, r: COIN_R, m: COIN_M, alive: true, a: Math.random() * Math.PI * 2, w: 0 };
 }
 
 export type WorldConfig = {
@@ -185,6 +220,8 @@ export function makeWorld(cfg: WorldConfig): World {
     r: STRIKER_R,
     m: STRIKER_M,
     alive: true,
+    a: 0,
+    w: 0,
   };
   const discs: Disc[] = [striker];
 
@@ -215,6 +252,7 @@ export function makeWorld(cfg: WorldConfig): World {
     strikerT,
     shot: { potted: [], strikerPotted: false, contact: false },
     sinks: [],
+    events: [],
     shotCount: 0,
     result: null,
   };
@@ -297,11 +335,28 @@ export function placeStriker(world: World, seat: number, t: number) {
 
 /* ================= physics ================= */
 
-function pot(world: World, d: Disc) {
+function pot(world: World, d: Disc, pocket: Vec) {
+  const sp = Math.hypot(d.vx, d.vy);
+  // direction of travel; a coin crawling in with no speed just heads for the pocket centre
+  const dir = sp > 1 ? { x: d.vx / sp, y: d.vy / sp } : norm({ x: pocket.x - d.x, y: pocket.y - d.y });
+  world.sinks.push({
+    x: d.x,
+    y: d.y,
+    px: pocket.x,
+    py: pocket.y,
+    dx: dir.x,
+    dy: dir.y,
+    sp,
+    kind: d.kind,
+    t: SINK_T,
+    a: d.a,
+    w: d.w + sp * 0.01,
+  });
+  world.events.push({ type: "pot", x: d.x, y: d.y, px: pocket.x, py: pocket.y, s: sp, kind: d.kind });
   d.alive = false;
   d.vx = 0;
   d.vy = 0;
-  world.sinks.push({ x: d.x, y: d.y, kind: d.kind, t: 0.4 });
+  d.w = 0;
   if (d.kind === "striker") {
     world.shot.strikerPotted = true;
   } else {
@@ -337,6 +392,53 @@ function collide(world: World, a: Disc, b: Disc) {
   a.vy -= j * ny * invA;
   b.vx += j * nx * invB;
   b.vy += j * ny * invB;
+
+  // Tangential (friction) impulse at the contact point, including the discs' own spin.
+  // Bounded by Coulomb friction (mu * j) so it can never add energy.
+  const tx = -ny;
+  const ty = nx;
+  const vt = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty - (a.w * a.r + b.w * b.r);
+  if (Math.abs(vt) > 1e-3) {
+    // a uniform disc's moment of inertia is m r^2 / 2, so spin adds 2/m to the tangent inverse mass
+    const kT = invSum + 2 * invA + 2 * invB;
+    const jt = clamp(-vt / kT, -DISC_MU * j, DISC_MU * j);
+    a.vx -= jt * tx * invA;
+    a.vy -= jt * ty * invA;
+    b.vx += jt * tx * invB;
+    b.vy += jt * ty * invB;
+    // torque from the contact impulse: both discs' spin changes by -2*jt/(m*r)
+    a.w -= (2 * jt * invA) / a.r;
+    b.w -= (2 * jt * invB) / b.r;
+  }
+
+  const strength = -vn;
+  if (strength > 60) {
+    world.events.push({
+      type: "hit",
+      x: a.x + nx * a.r,
+      y: a.y + ny * a.r,
+      s: strength,
+      striker: a.kind === "striker" || b.kind === "striker",
+    });
+  }
+}
+
+function wallBounce(world: World, d: Disc, axis: "x" | "y") {
+  const vn = axis === "x" ? d.vx : d.vy;
+  const speed = Math.abs(vn);
+  // harder hits lose more energy (the rubber cushion compresses)
+  const e = WALL_E_SOFT - (WALL_E_SOFT - WALL_E_HARD) * clamp(speed / 1800, 0, 1);
+  if (axis === "x") {
+    d.vx = -d.vx * e;
+    // cushion friction turns some of the sliding along the wall into spin
+    d.w += (d.vy / d.r) * 0.25;
+    d.vy *= 0.97;
+  } else {
+    d.vy = -d.vy * e;
+    d.w -= (d.vx / d.r) * 0.25;
+    d.vx *= 0.97;
+  }
+  if (speed > 80) world.events.push({ type: "wall", x: d.x, y: d.y, s: speed });
 }
 
 function wallAndPocket(world: World, d: Disc, dt: number) {
@@ -345,7 +447,22 @@ function wallAndPocket(world: World, d: Disc, dt: number) {
     const dy = p.y - d.y;
     const pd = Math.hypot(dx, dy);
     if (pd < POCKET_CAPTURE) {
-      pot(world, d);
+      const sp = Math.hypot(d.vx, d.vy);
+      // A very fast coin clipping the jaw (not heading into the middle) rattles back out.
+      const headOn = sp > 0 ? (d.vx * dx + d.vy * dy) / (sp * Math.max(pd, 0.001)) : 1;
+      if (sp > RATTLE_SPEED && pd > POCKET_R * 0.55 && headOn < 0.9) {
+        const nx = -dx / (pd || 1);
+        const ny = -dy / (pd || 1);
+        const vn = d.vx * nx + d.vy * ny;
+        d.vx = (d.vx - 2 * vn * nx) * 0.45;
+        d.vy = (d.vy - 2 * vn * ny) * 0.45;
+        d.x = p.x + nx * (POCKET_CAPTURE + 1);
+        d.y = p.y + ny * (POCKET_CAPTURE + 1);
+        d.w += (Math.random() - 0.5) * 12;
+        world.events.push({ type: "rattle", x: d.x, y: d.y, s: sp });
+        return;
+      }
+      pot(world, d, p);
       return;
     }
     if (pd < POCKET_PULL && pd > 0.001) {
@@ -358,23 +475,29 @@ function wallAndPocket(world: World, d: Disc, dt: number) {
 
   if (d.x - d.r < PF_MIN && d.vx < 0) {
     d.x = PF_MIN + d.r;
-    d.vx *= -WALL_E;
+    wallBounce(world, d, "x");
   } else if (d.x + d.r > PF_MAX && d.vx > 0) {
     d.x = PF_MAX - d.r;
-    d.vx *= -WALL_E;
+    wallBounce(world, d, "x");
   }
   if (d.y - d.r < PF_MIN && d.vy < 0) {
     d.y = PF_MIN + d.r;
-    d.vy *= -WALL_E;
+    wallBounce(world, d, "y");
   } else if (d.y + d.r > PF_MAX && d.vy > 0) {
     d.y = PF_MAX - d.r;
-    d.vy *= -WALL_E;
+    wallBounce(world, d, "y");
   }
 }
 
 export function stepPhysics(world: World, dt: number) {
   for (const d of world.discs) {
     if (!d.alive) continue;
+    // spin turns the coin visually and decays with board friction
+    if (d.w !== 0) {
+      d.a += d.w * dt;
+      d.w *= Math.exp(-SPIN_DRAG * dt);
+      if (Math.abs(d.w) < 0.05) d.w = 0;
+    }
     const oldSp = Math.hypot(d.vx, d.vy);
     if (oldSp <= 0) continue;
     let sp = oldSp * Math.exp(-FRICTION_K * dt) - FRICTION_LIN * dt;
@@ -400,8 +523,16 @@ export function stepPhysics(world: World, dt: number) {
     if (!d.alive) continue;
     wallAndPocket(world, d, dt);
   }
+}
 
-  for (const s of world.sinks) s.t -= dt;
+/** Advance the pocket-drop animations. Runs every frame (not only during physics), so a coin
+ *  potted on the last moving frame of a shot still finishes falling. */
+export function tickSinks(world: World, dt: number) {
+  if (!world.sinks.length) return;
+  for (const s of world.sinks) {
+    s.t -= dt;
+    s.a += s.w * dt;
+  }
   world.sinks = world.sinks.filter((s) => s.t > 0);
 }
 
@@ -512,6 +643,14 @@ export function resolveShot(world: World): ShotResult {
   return { extra, msg, over };
 }
 
+/** The player on turn ran out of time: no shot, the turn passes (a pending queen goes back). */
+export function skipTurn(world: World) {
+  const seat = world.turn;
+  if (world.queen.state === "pending" && world.queen.seat === seat) reviveQueen(world);
+  world.turn = (seat + 1) % world.players.length;
+  resetStriker(world, world.turn);
+}
+
 /** Leaderboard score from the given seat's perspective. */
 export function scoreForSeat(world: World, seat = 0): number {
   const myColor = colorOfSeat(seat, world.seats);
@@ -575,6 +714,8 @@ export function applySnapshot(world: World, snap: Snap): World {
       r: kind === "striker" ? STRIKER_R : COIN_R,
       m: kind === "striker" ? STRIKER_M : COIN_M,
       alive: true,
+      a: world.discs.find((o) => o.id === id)?.a ?? 0,
+      w: 0,
     };
     if (kind === "striker") striker = d;
     if (kind === "queen") queenDisc = d;
@@ -605,6 +746,7 @@ export function applySnapshot(world: World, snap: Snap): World {
   world.shotCount = snap.shotCount;
   world.result = snap.winner ? { winner: snap.winner } : null;
   world.sinks = [];
+  world.events = [];
   return world;
 }
 

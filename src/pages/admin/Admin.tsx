@@ -320,14 +320,107 @@ function SettingsTab() {
   );
 }
 
+/* ---------- Pro members ---------- */
+
+type ProMember = { user_id: string; email: string | null; note: string | null; created_at: string };
+
+function ProTab() {
+  const [members, setMembers] = useState<ProMember[] | null>(null);
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const load = () =>
+    adminCall<{ members: ProMember[] }>("pro_list").then(
+      (r) => setMembers(r.members),
+      (e) => setMsg(e instanceof Error ? e.message : "Failed to load (did you run supabase/pro.sql?)"),
+    );
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function setPro(target: string, on: boolean) {
+    setMsg("");
+    try {
+      await adminCall("pro_set", { email: target, on, note });
+      setMsg(on ? `${target} is now Pro.` : `Pro removed from ${target}.`);
+      if (on) {
+        setEmail("");
+        setNote("");
+      }
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Failed");
+    }
+  }
+
+  return (
+    <div className="card adm-card adm-settings">
+      <h3>Senevon Pro</h3>
+      <p className="adm-note">
+        Pro unlocks every Carrom striker and coin set. Until payments are connected, grant it here by the player's account
+        email.
+      </p>
+      <div className="adm-field">
+        <label>Player email</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="player@example.com" />
+      </div>
+      <div className="adm-field">
+        <label>Note (optional)</label>
+        <input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="e.g. paid via UPI, order #123" />
+      </div>
+      <div className="adm-actions">
+        <button type="button" className="primary-btn" disabled={!email.includes("@")} onClick={() => void setPro(email.trim(), true)}>
+          Grant Pro
+        </button>
+        {msg ? <span className="adm-note">{msg}</span> : null}
+      </div>
+      <div className="adm-table-wrap">
+        <table className="adm-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Note</th>
+              <th>Since</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {(members ?? []).map((m) => (
+              <tr key={m.user_id}>
+                <td>{m.email ?? m.user_id}</td>
+                <td>{m.note ?? "—"}</td>
+                <td>{new Date(m.created_at).toLocaleDateString()}</td>
+                <td>
+                  {m.email ? (
+                    <button type="button" className="ghost-btn" onClick={() => void setPro(m.email!, false)}>
+                      Remove
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+            {members && !members.length ? (
+              <tr>
+                <td colSpan={4}>No Pro members yet.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- shell ---------- */
 
-type Tab = "overview" | "traffic" | "games" | "ads" | "settings";
+type Tab = "overview" | "traffic" | "games" | "ads" | "pro" | "settings";
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
   ["traffic", "Traffic"],
   ["games", "Games"],
   ["ads", "Ads"],
+  ["pro", "Pro"],
   ["settings", "Settings"],
 ];
 
@@ -371,7 +464,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             ))}
           </nav>
           <div className="adm-bar-right">
-            {tab !== "ads" && tab !== "settings" ? (
+            {tab !== "ads" && tab !== "settings" && tab !== "pro" ? (
               <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Date range">
                 <option value={7}>Last 7 days</option>
                 <option value={30}>Last 30 days</option>
@@ -394,7 +487,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         {tab === "games" && stats ? <GamesTab s={stats} /> : null}
         {tab === "ads" ? <AdsManager stats={stats?.ads} /> : null}
         {tab === "settings" ? <SettingsTab /> : null}
-        {!stats && !err && tab !== "ads" && tab !== "settings" ? <p className="adm-empty">Loading…</p> : null}
+        {tab === "pro" ? <ProTab /> : null}
+        {!stats && !err && tab !== "ads" && tab !== "settings" && tab !== "pro" ? <p className="adm-empty">Loading…</p> : null}
       </main>
     </div>
   );

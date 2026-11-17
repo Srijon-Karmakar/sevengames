@@ -82,7 +82,7 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
             return (
               <Link
                 key={c}
-                to="/games"
+                to={c === "All" ? "/games" : `/category/${c.toLowerCase()}`}
                 className="h3-rail-item"
                 data-label={c === "All" ? "All games" : c}
               >

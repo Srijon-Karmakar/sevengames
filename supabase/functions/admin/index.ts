@@ -24,7 +24,7 @@ const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 const enc = new TextEncoder();
 
 const db = createClient(
-  Deno.env.get("SUPABASE_U RL")!,
+  Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { auth: { persistSession: false } },
 );
@@ -411,6 +411,36 @@ Deno.serve(async (req) => {
 
       case "upload_sign":
         return json(await cloudinarySignature());
+
+      /* ---- Senevon Pro: grant / revoke (payments are wired later) ---- */
+      case "pro_list": {
+        const { data, error } = await db.from("pro_members").select("user_id, email, note, created_at").order("created_at", { ascending: false });
+        if (error) throw error;
+        return json({ members: data ?? [] });
+      }
+
+      case "pro_set": {
+        const email = text(body.email, 200).toLowerCase();
+        const on = Boolean(body.on);
+        if (!email.includes("@")) return json({ error: "Enter the player's account email" }, 400);
+        // find the auth user by email (paged; fine for small/medium user counts)
+        let userId: string | null = null;
+        for (let page = 1; page <= 20 && !userId; page++) {
+          const { data, error } = await db.auth.admin.listUsers({ page, perPage: 200 });
+          if (error) throw error;
+          userId = data.users.find((u) => (u.email ?? "").toLowerCase() === email)?.id ?? null;
+          if (data.users.length < 200) break;
+        }
+        if (!userId) return json({ error: "No account with that email" }, 404);
+        if (on) {
+          const { error } = await db.from("pro_members").upsert({ user_id: userId, email, note: text(body.note, 200) || null });
+          if (error) throw error;
+        } else {
+          const { error } = await db.from("pro_members").delete().eq("user_id", userId);
+          if (error) throw error;
+        }
+        return json({ ok: true });
+      }
 
       default:
         return json({ error: "Unknown action" }, 400);

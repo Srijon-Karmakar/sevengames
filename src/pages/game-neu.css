@@ -1,0 +1,785 @@
+/* ============================================================
+   Game pages: neumorphism (soft extruded UI) — light + dark.
+   Everything is scoped under .site[data-gtheme], which SiteChrome sets
+   only on /game/:id, so no other page is affected.
+
+   Surfaces share the page colour and get their depth from a light
+   highlight (top-left) and a dark shadow (bottom-right). Buttons sink
+   in when pressed (raised shadow -> inset), then spring back.
+
+   Every interactive shadow is written as the same 4 layers
+   (2 outer + 2 inset), so raised <-> pressed animates smoothly.
+   ============================================================ */
+
+/* ---------- Tokens ---------- */
+.site[data-gtheme="light"] {
+  --neu-bg: #e3e5ea;
+  --neu-hi: #ffffff;
+  --neu-lo: #b6bac3;
+  --neu-accent: #e25a00;
+}
+
+.site[data-gtheme="dark"] {
+  --neu-bg: #2c2e33;
+  --neu-hi: #383b41;
+  --neu-lo: #1c1d21;
+  --neu-accent: #ff8a3d;
+}
+
+/* The game screen is always dark (the games are designed for it): its own dark soft surface */
+.site[data-gtheme] .gp-stage {
+  --neu-bg: #202127;
+  --neu-hi: #2d2f36;
+  --neu-lo: #121317;
+  --neu-accent: #ff9a55;
+}
+
+/* Light mode: the game screen is a light soft surface too */
+.site.site[data-gtheme="light"] .gp-stage {
+  --neu-bg: #e3e5ea;
+  --neu-hi: #ffffff;
+  --neu-lo: #b6bac3;
+  --neu-accent: #e25a00;
+  --text: #17181b;
+  --text-secondary: rgba(23, 24, 27, 0.66);
+  --text-tertiary: rgba(23, 24, 27, 0.48);
+  --bg: #e3e5ea;
+  --bg-elevated: #eceef2;
+  --border-soft: rgba(0, 0, 0, 0.07);
+  --border-strong: rgba(0, 0, 0, 0.14);
+}
+
+/* Sidebar: an orange-tinted soft surface */
+.site[data-gtheme="light"] .h3-rail {
+  --neu-bg: #ecd9cc;
+  --neu-hi: #fff5ee;
+  --neu-lo: #caa892;
+  --neu-accent: #d84f00;
+}
+
+.site[data-gtheme="dark"] .h3-rail {
+  --neu-bg: #46362c;
+  --neu-hi: #534237;
+  --neu-lo: #281e18;
+  --neu-accent: #ff9a55;
+}
+
+/* Composite shadows. Declared on every scope that redefines the colours, so each resolves
+   its own highlight/shadow pair. */
+.site[data-gtheme],
+.site[data-gtheme] .gp-stage,
+.site[data-gtheme] .h3-rail {
+  --neu-flat: 0 0 0 var(--neu-lo), 0 0 0 var(--neu-hi), inset 0 0 0 var(--neu-lo), inset 0 0 0 var(--neu-hi);
+  --neu-raise: 6px 6px 14px var(--neu-lo), -6px -6px 14px var(--neu-hi), inset 0 0 0 var(--neu-lo),
+    inset 0 0 0 var(--neu-hi);
+  --neu-raise-sm: 3px 3px 8px var(--neu-lo), -3px -3px 8px var(--neu-hi), inset 0 0 0 var(--neu-lo),
+    inset 0 0 0 var(--neu-hi);
+  --neu-press: 0 0 0 var(--neu-lo), 0 0 0 var(--neu-hi), inset 4px 4px 9px var(--neu-lo),
+    inset -4px -4px 9px var(--neu-hi);
+  --neu-well: inset 3px 3px 7px var(--neu-lo), inset -3px -3px 7px var(--neu-hi);
+  --neu-well-sm: inset 2px 2px 4px var(--neu-lo), inset -2px -2px 4px var(--neu-hi);
+  --neu-panel: 12px 12px 28px var(--neu-lo), -12px -12px 28px var(--neu-hi);
+  /* Orange primaries: raised orange with a soft inner bevel, and an orange pressed state */
+  --neu-orange-raise: 6px 6px 14px var(--neu-lo), -6px -6px 14px var(--neu-hi),
+    inset 2px 2px 4px rgba(255, 225, 190, 0.6), inset -3px -3px 6px rgba(150, 45, 0, 0.35);
+  /* Hover = half-pushed: the outer shadow collapses and the face starts to sink */
+  --neu-half: 1px 1px 3px var(--neu-lo), -1px -1px 3px var(--neu-hi), inset 2px 2px 5px var(--neu-lo),
+    inset -2px -2px 5px var(--neu-hi);
+  --neu-orange-half: 1px 1px 3px var(--neu-lo), -1px -1px 3px var(--neu-hi), inset 3px 3px 6px #c75200,
+    inset -3px -3px 6px #ffa868;
+  --neu-orange-press: 0 0 0 var(--neu-lo), 0 0 0 var(--neu-hi), inset 4px 4px 9px #b44600,
+    inset -4px -4px 9px #ffac6b;
+  --neu-orange: linear-gradient(145deg, #ff9d52, #f26a0c);
+  --neu-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --neu-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Page colour = panel colour (neumorphism needs one continuous surface) */
+.site[data-gtheme] {
+  --gp-page: var(--neu-bg);
+  --gp-panel: var(--neu-bg);
+  --gp-line: transparent;
+  --gp-seg: transparent;
+  background: var(--neu-bg);
+}
+
+/* ============================================================
+   Shared behaviours
+   ============================================================ */
+
+/* Raised buttons: rise on hover, sink when pressed, spring back on release */
+.site[data-gtheme] .gp .back-link,
+.site[data-gtheme] .h3-theme-toggle,
+.site[data-gtheme] .gp-guest-x,
+.site[data-gtheme] .gp-modes > button,
+.site[data-gtheme] .gp-modes > a,
+.site[data-gtheme] .gp-stage .ghost-btn,
+.site[data-gtheme] .gp-stage .exit-full,
+.site[data-gtheme] .gp-stage .carrom-profile,
+.site[data-gtheme] .gp-stage .carrom-mute,
+.site[data-gtheme] .gp-stage .carrom-tabs button,
+.site[data-gtheme] .gp-stage .carrom-item {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-raise-sm);
+  transition:
+    box-shadow 0.22s var(--neu-ease),
+    transform 0.45s var(--neu-spring),
+    color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.site[data-gtheme] .gp-stage .ghost-btn,
+.site[data-gtheme] .gp-stage .carrom-profile,
+.site[data-gtheme] .gp-stage .carrom-item {
+  box-shadow: var(--neu-raise);
+}
+
+/* Orange primaries */
+.site[data-gtheme] .gp-stage .primary-btn,
+.site[data-gtheme] .h3-nav .h3-account {
+  border: 0;
+  color: #1f0c00;
+  background: var(--neu-orange);
+  box-shadow: var(--neu-orange-raise);
+  transition:
+    box-shadow 0.22s var(--neu-ease),
+    transform 0.45s var(--neu-spring),
+    filter 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .site[data-gtheme] .gp .back-link:hover,
+  .site[data-gtheme] .gp-guest-x:hover,
+  .site[data-gtheme] .gp-modes > button:not(.active):hover,
+  .site[data-gtheme] .gp-modes > a:hover,
+  .site[data-gtheme] .gp-stage .ghost-btn:not(.active):hover,
+  .site[data-gtheme] .gp-stage .exit-full:hover,
+  .site[data-gtheme] .gp-stage .carrom-mute:hover,
+  .site[data-gtheme] .gp-stage .carrom-tabs button:not(.on):hover,
+  .site[data-gtheme] .gp-stage .carrom-profile:hover,
+  .site[data-gtheme] .gp-stage .carrom-item:not(.is-on):not(.is-locked):hover {
+    box-shadow: var(--neu-half);
+    transform: translateY(1px) scale(0.985);
+    color: var(--neu-accent);
+    transition:
+      box-shadow 0.14s ease-out,
+      transform 0.14s ease-out,
+      color 0.2s ease;
+  }
+
+  .site[data-gtheme] .gp-stage .carrom-profile:hover {
+    color: inherit;
+  }
+
+  .site[data-gtheme] .h3-theme-toggle:hover {
+    background: var(--neu-bg);
+    box-shadow: var(--neu-half);
+    transform: translateY(1px) scale(0.97);
+    transition:
+      box-shadow 0.14s ease-out,
+      transform 0.14s ease-out;
+  }
+
+  .site[data-gtheme] .gp-stage .primary-btn:hover:not(:disabled),
+  .site[data-gtheme] .h3-nav .h3-account:hover {
+    box-shadow: var(--neu-orange-half);
+    transform: translateY(1px) scale(0.985);
+    filter: brightness(0.97);
+    transition:
+      box-shadow 0.14s ease-out,
+      transform 0.14s ease-out,
+      filter 0.14s ease-out;
+  }
+}
+
+/* Pressed (click): pushed all the way in, quickly; on release it springs back out */
+.site[data-gtheme] .gp .back-link:active,
+.site[data-gtheme] .h3-theme-toggle:active,
+.site[data-gtheme] .gp-guest-x:active,
+.site[data-gtheme] .gp-modes > *:active,
+.site[data-gtheme] .gp-stage .ghost-btn:active,
+.site[data-gtheme] .gp-stage .exit-full:active,
+.site[data-gtheme] .gp-stage .carrom-profile:active,
+.site[data-gtheme] .gp-stage .carrom-mute:active,
+.site[data-gtheme] .gp-stage .carrom-tabs button:active,
+.site[data-gtheme] .gp-stage .carrom-item:not(.is-locked):active {
+  box-shadow: var(--neu-press);
+  transform: translateY(2px) scale(0.96);
+  transition-duration: 0.07s;
+}
+
+.site[data-gtheme] .gp-stage .primary-btn:active:not(:disabled),
+.site[data-gtheme] .h3-nav .h3-account:active {
+  box-shadow: var(--neu-orange-press);
+  transform: translateY(2px) scale(0.96);
+  filter: brightness(0.94);
+  transition-duration: 0.07s;
+}
+
+/* Toggles that are ON stay pressed in, with orange ink */
+.site[data-gtheme] .gp-modes > .active,
+.site[data-gtheme] .gp-stage .ghost-btn.active,
+.site[data-gtheme] .gp-stage .carrom-tabs button.on,
+.site[data-gtheme] .gp-stage .carrom-item.is-on {
+  color: var(--neu-accent);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-press);
+  transform: none;
+}
+
+.site[data-gtheme] .gp-stage .primary-btn:disabled {
+  box-shadow: var(--neu-flat);
+  filter: saturate(0.4);
+}
+
+.site[data-gtheme] :is(.gp, .site-chrome) :focus-visible {
+  outline: 2px solid var(--neu-accent);
+  outline-offset: 3px;
+}
+
+/* ============================================================
+   Page frame
+   ============================================================ */
+
+/* Nav band: the same soft surface with a gentle shadow below */
+.site[data-gtheme] .h3-nav::before {
+  background: var(--neu-bg);
+  box-shadow: 0 8px 18px -10px var(--neu-lo);
+}
+
+.site[data-gtheme] .h3-menu a:hover {
+  color: var(--neu-accent);
+}
+
+.site[data-gtheme] .h3-theme-toggle {
+  color: var(--text, inherit);
+}
+
+.site[data-gtheme="light"] .h3-theme-toggle {
+  color: #2a2a2a;
+}
+
+.site[data-gtheme="dark"] .h3-theme-toggle {
+  color: #f1f1f3;
+}
+
+/* Sidebar: one raised pill; items sit flat, rise on hover and sink when pressed */
+.site[data-gtheme] .h3-rail {
+  background: linear-gradient(160deg, var(--neu-hi) -40%, var(--neu-bg) 45%);
+  border: 0;
+}
+
+/* Outer depth uses the page's own highlight/shadow, plus a faint orange glow */
+.site[data-gtheme="light"] .h3-rail {
+  box-shadow:
+    12px 12px 28px #b6bac3,
+    -12px -12px 28px #ffffff,
+    0 0 30px -8px rgba(255, 122, 26, 0.35);
+}
+
+.site[data-gtheme="dark"] .h3-rail {
+  box-shadow:
+    12px 12px 28px #1c1d21,
+    -12px -12px 28px #383b41,
+    0 0 30px -8px rgba(255, 122, 26, 0.3);
+}
+
+.site[data-gtheme="light"] .h3-rail-item:not(.active):not(:hover) {
+  color: #4a2a17;
+}
+
+.site[data-gtheme="dark"] .h3-rail-item:not(.active):not(:hover) {
+  color: #f6e3d6;
+}
+
+.site[data-gtheme] .h3-rail::before,
+.site[data-gtheme] .h3-rail-glow {
+  display: none;
+}
+
+.site[data-gtheme] .h3-rail-item {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-flat);
+  transition:
+    box-shadow 0.22s var(--neu-ease),
+    transform 0.45s var(--neu-spring),
+    color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .site[data-gtheme] .h3-rail-item:hover {
+    background: var(--neu-bg);
+    box-shadow: var(--neu-half);
+    color: var(--neu-accent);
+    transform: scale(0.97);
+    transition:
+      box-shadow 0.14s ease-out,
+      transform 0.14s ease-out,
+      color 0.2s ease;
+  }
+}
+
+.site[data-gtheme] .h3-rail-item:active,
+.site[data-gtheme] .h3-rail-item.active {
+  background: var(--neu-bg);
+  color: var(--neu-accent);
+  box-shadow: var(--neu-press);
+  transform: scale(0.95);
+  transition-duration: 0.08s;
+}
+
+.site[data-gtheme] .h3-rail-item.active {
+  transform: none;
+}
+
+.site[data-gtheme] .h3-rail-sep {
+  height: 2px;
+  background: none;
+  border-radius: 2px;
+  box-shadow: var(--neu-well-sm);
+}
+
+/* Back link: small raised pill */
+.site[data-gtheme] .gp .back-link {
+  padding: 7px 14px 7px 9px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Game picture: a raised disc with the game's accent ring set into it */
+.site[data-gtheme] .gp .game-header .poster-hero {
+  box-shadow:
+    0 0 0 4px var(--neu-bg),
+    0 0 0 6px color-mix(in srgb, var(--accent) 65%, transparent),
+    8px 8px 18px var(--neu-lo),
+    -8px -8px 18px var(--neu-hi);
+}
+
+/* Detail chips: pressed into the surface */
+.site[data-gtheme] .gp-chips li {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+  padding: 5px 12px;
+}
+
+.site[data-gtheme] .gp-chips .gp-chip-best {
+  color: #1f0c00;
+  background: var(--neu-orange);
+  box-shadow: var(--neu-orange-raise);
+}
+
+/* Guest notice: a sunken pill with an orange icon */
+.site[data-gtheme] .gp-guest {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well);
+  padding: 8px 8px 8px 14px;
+}
+
+.site[data-gtheme] .gp-guest a {
+  color: var(--neu-accent);
+}
+
+.site[data-gtheme] .gp-guest-x {
+  width: 26px;
+  height: 26px;
+  margin-left: 6px;
+  color: var(--text-secondary);
+}
+
+/* Play frame: a large raised panel; the game screen is set into it */
+.site[data-gtheme] .gp-frame {
+  border: 0;
+  border-radius: 26px;
+  padding: 10px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-panel);
+}
+
+.site[data-gtheme] .gp-toolbar {
+  padding: 6px 6px 14px 12px;
+}
+
+/* Mode switch: separate raised keys; the current one is pressed in */
+.site[data-gtheme] .gp-modes {
+  gap: 10px;
+  padding: 2px;
+  background: none;
+}
+
+.site[data-gtheme] .gp-modes > button,
+.site[data-gtheme] .gp-modes > a {
+  color: var(--text-secondary);
+  padding: 8px 14px;
+}
+
+.site[data-gtheme] .gp-modes > .active {
+  font-weight: 600;
+}
+
+/* The game screen: a sunken dark well */
+.site[data-gtheme] .gp-stage {
+  background: var(--neu-bg);
+  border-radius: 18px;
+  box-shadow:
+    inset 6px 6px 14px var(--neu-lo),
+    inset -6px -6px 14px var(--neu-hi);
+}
+
+/* ---------- Light game screen: dark ink instead of the dark-screen whites ---------- */
+.site.site[data-gtheme="light"] .gp-stage,
+.site.site[data-gtheme="light"] .gp-stage .game-status,
+.site.site[data-gtheme="light"] .gp-stage .game-prompt,
+.site.site[data-gtheme="light"] .gp-stage .ghost-btn,
+.site.site[data-gtheme="light"] .gp-stage .exit-full,
+.site.site[data-gtheme="light"] .gp-stage .carrom-mute,
+.site.site[data-gtheme="light"] .gp-stage .carrom-chip,
+.site.site[data-gtheme="light"] .gp-stage .carrom-code-input,
+.site.site[data-gtheme="light"] .gp-stage .carrom-locker-head h3,
+.site.site[data-gtheme="light"] .gp-stage .carrom-item {
+  color: var(--text);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .game-prompt.big {
+  background: linear-gradient(180deg, #1d1e22, #c4530a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.site.site[data-gtheme="light"] .gp-stage .game-hint,
+.site.site[data-gtheme="light"] .gp-stage .carrom-hint,
+.site.site[data-gtheme="light"] .gp-stage .carrom-level-top small,
+.site.site[data-gtheme="light"] .gp-stage .carrom-code-hint,
+.site.site[data-gtheme="light"] .gp-stage .carrom-tabs button,
+.site.site[data-gtheme="light"] .gp-stage .carrom-item-tag {
+  color: var(--text-secondary);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .carrom-profile-cta,
+.site.site[data-gtheme="light"] .gp-stage .carrom-code,
+.site.site[data-gtheme="light"] .gp-stage .carrom-reward > b {
+  color: var(--neu-accent);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .carrom-unlocked {
+  color: #0f9a55;
+}
+
+.site.site[data-gtheme="light"] .gp-stage .carrom-power {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .carrom-reward {
+  background: var(--neu-bg);
+  border: 0;
+  box-shadow: var(--neu-raise);
+}
+
+/* The board keeps its own art; soften its frame shadow for the light screen */
+.site.site[data-gtheme="light"] .gp-stage .carrom-stage {
+  box-shadow: 10px 10px 24px var(--neu-lo), -10px -10px 24px var(--neu-hi);
+}
+
+/* Leaderboard: raised panel, scores in a sunken tray */
+.site[data-gtheme] .gp .leaderboard {
+  border: 0;
+  border-radius: 24px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-panel);
+}
+
+.site[data-gtheme] .gp .leaderboard-list {
+  gap: 4px;
+  padding: 6px;
+  border-radius: 16px;
+  box-shadow: var(--neu-well);
+}
+
+.site[data-gtheme] .gp .leaderboard-list li,
+.site[data-gtheme="light"] .gp .leaderboard-list li:nth-child(odd) {
+  background: none;
+  border-radius: 11px;
+}
+
+.site[data-gtheme] .gp .leaderboard-list li.you {
+  color: var(--neu-accent);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-raise-sm);
+}
+
+.site[data-gtheme] .gp .leaderboard-list .rank {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 11.5px;
+  box-shadow: var(--neu-raise-sm);
+}
+
+.site[data-gtheme] .gp .leaderboard-empty,
+.site[data-gtheme] .gp .leaderboard-personal {
+  padding-inline: 4px;
+}
+
+/* ============================================================
+   Inside the game screen: shared menus + HUD (all built-in games)
+   ============================================================ */
+
+.site[data-gtheme] .gp-stage .game-status {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well);
+}
+
+.site[data-gtheme] .gp-stage .ghost-btn {
+  color: #e9e9ee;
+}
+
+.site[data-gtheme] .gp-stage .exit-full {
+  color: #f1f1f3;
+  box-shadow: var(--neu-raise);
+}
+
+.site[data-gtheme] .gp-stage .timer-bar {
+  height: 8px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+/* ---------- Carrom menus ---------- */
+.site[data-gtheme] .gp-stage .carrom-menu {
+  gap: 14px;
+}
+
+.site[data-gtheme] .gp-stage .carrom-menu-sep {
+  height: 3px;
+  margin: 6px 4px;
+  border-radius: 3px;
+  background: none;
+  box-shadow: var(--neu-well-sm);
+}
+
+.site[data-gtheme] .gp-stage .carrom-profile {
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.site[data-gtheme] .gp-stage .carrom-level-badge {
+  box-shadow:
+    3px 3px 8px var(--neu-lo),
+    -3px -3px 8px var(--neu-hi),
+    inset 2px 2px 4px rgba(255, 225, 190, 0.55),
+    inset -2px -2px 5px rgba(150, 45, 0, 0.35);
+}
+
+.site[data-gtheme] .gp-stage .carrom-level-track {
+  height: 8px;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site[data-gtheme] .gp-stage .carrom-chip {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+  transition: box-shadow 0.3s var(--neu-ease), color 0.2s ease;
+}
+
+/* Whose turn: that chip rises out of the surface */
+.site[data-gtheme] .gp-stage .carrom-chip.active {
+  color: var(--neu-accent);
+  background: var(--neu-bg);
+  box-shadow: 3px 3px 8px var(--neu-lo), -3px -3px 8px var(--neu-hi);
+}
+
+.site[data-gtheme] .gp-stage .carrom-mute {
+  color: #e9e9ee;
+}
+
+.site[data-gtheme] .gp-stage .carrom-code-input,
+.site[data-gtheme] .gp-stage .carrom-roster li {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well);
+}
+
+.site[data-gtheme] .gp-stage .carrom-tabs {
+  gap: 10px;
+  padding: 4px;
+  background: none;
+}
+
+.site[data-gtheme] .gp-stage .carrom-tabs button {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.site[data-gtheme] .gp-stage .carrom-items {
+  gap: 14px;
+  padding: 4px;
+}
+
+.site[data-gtheme] .gp-stage .carrom-item {
+  border-radius: 18px;
+  color: #eee;
+}
+
+.site[data-gtheme] .gp-stage .carrom-item.is-on {
+  outline: 1.5px solid var(--neu-accent);
+  outline-offset: -1.5px;
+}
+
+.site[data-gtheme] .gp-stage .carrom-item-tag {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site[data-gtheme] .gp-stage .carrom-item-tag.on {
+  color: #1f0c00;
+  background: var(--neu-orange);
+  box-shadow: none;
+}
+
+/* Striker slider: a sunken groove with a raised striker thumb */
+.site[data-gtheme] .gp-stage .carrom-place input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site[data-gtheme] .gp-stage .carrom-place input[type="range"]::-moz-range-track {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site[data-gtheme] .gp-stage .carrom-place input[type="range"]::-webkit-slider-thumb {
+  box-shadow: 3px 3px 8px var(--neu-lo), -3px -3px 8px var(--neu-hi);
+}
+
+.site[data-gtheme] .gp-stage .carrom-place input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(0.94);
+  box-shadow: 1px 1px 3px var(--neu-lo), -1px -1px 3px var(--neu-hi);
+}
+
+/* Turn clock: sunken pill */
+.site[data-gtheme] .gp-stage .carrom-timer {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .carrom-timer {
+  color: var(--text);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .carrom-timer.warn {
+  color: #d63a1f;
+}
+
+.site[data-gtheme] .gp-stage .carrom-pro-card {
+  border: 0;
+  box-shadow: var(--neu-raise), inset 0 0 0 1px rgba(255, 200, 80, 0.3);
+}
+
+/* ============================================================
+   Entry motion: panels and controls emboss up out of the surface
+   (fill-mode "backwards" only, so hover / press states take over afterwards)
+   ============================================================ */
+@keyframes neu-emboss {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+    box-shadow: var(--neu-flat);
+  }
+}
+
+@keyframes neu-emboss-flat {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.site[data-gtheme] .gp .back-link {
+  animation: neu-emboss 0.6s var(--neu-ease) backwards;
+}
+
+.site[data-gtheme] .gp .game-header .poster-hero {
+  animation: neu-emboss-flat 0.7s var(--neu-ease) 0.06s backwards;
+}
+
+.site[data-gtheme] .gp-chips li {
+  animation: neu-emboss-flat 0.5s var(--neu-ease) backwards;
+}
+
+.site[data-gtheme] .gp-chips li:nth-child(1) { animation-delay: 0.12s; }
+.site[data-gtheme] .gp-chips li:nth-child(2) { animation-delay: 0.17s; }
+.site[data-gtheme] .gp-chips li:nth-child(3) { animation-delay: 0.22s; }
+.site[data-gtheme] .gp-chips li:nth-child(4) { animation-delay: 0.27s; }
+
+.site[data-gtheme] .gp-guest {
+  animation: neu-emboss-flat 0.6s var(--neu-ease) 0.2s backwards;
+}
+
+.site[data-gtheme] .gp-frame {
+  animation: neu-emboss 0.8s var(--neu-ease) 0.24s backwards;
+}
+
+.site[data-gtheme] .gp .leaderboard {
+  animation: neu-emboss 0.8s var(--neu-ease) 0.36s backwards;
+}
+
+/* In-game menus emboss in each time a menu screen opens */
+.site[data-gtheme] .gp-stage .carrom-menu > * {
+  animation: neu-emboss 0.55s var(--neu-ease) backwards;
+}
+
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(1) { animation-delay: 0.04s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(2) { animation-delay: 0.09s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(3) { animation-delay: 0.14s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(4) { animation-delay: 0.19s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(5) { animation-delay: 0.24s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(6) { animation-delay: 0.29s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(7) { animation-delay: 0.34s; }
+.site[data-gtheme] .gp-stage .carrom-menu > :nth-child(n + 8) { animation-delay: 0.39s; }
+
+.site[data-gtheme] .gp-stage .carrom-item {
+  animation: neu-emboss 0.5s var(--neu-ease) backwards;
+}
+
+/* ---------- Phones: slightly shallower depth ---------- */
+@media (max-width: 600px) {
+  .site[data-gtheme],
+  .site[data-gtheme] .gp-stage {
+    --neu-panel: 8px 8px 18px var(--neu-lo), -8px -8px 18px var(--neu-hi);
+  }
+
+  .site[data-gtheme] .gp-frame {
+    padding: 7px;
+    border-radius: 20px;
+  }
+
+  .site[data-gtheme] .gp-stage {
+    border-radius: 14px;
+  }
+
+  .site[data-gtheme] .gp-modes {
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site[data-gtheme] .gp *,
+  .site[data-gtheme] .gp-frame,
+  .site[data-gtheme] .h3-rail-item,
+  .site[data-gtheme] .h3-theme-toggle,
+  .site[data-gtheme] .h3-account {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

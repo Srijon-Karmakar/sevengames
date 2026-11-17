@@ -399,3 +399,61 @@
   border-radius: 28px 28px 0 0;
   box-shadow: 0 -24px 60px -20px rgba(0, 0, 0, 0.45);
 }
+
+/* ---------- Discs without poster art: name + category on the game's colour ---------- */
+.fc .fc-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: calc(var(--size) * 0.012);
+  padding-top: calc(var(--size) * 0.14);
+  text-align: center;
+  color: #fff;
+  background-image:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 55%),
+    radial-gradient(circle at 70% 85%, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0) 60%);
+}
+
+.fc .fc-fallback b {
+  max-width: 70%;
+  font-size: calc(var(--size) * 0.085);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.fc .fc-fallback i {
+  font-style: normal;
+  font-family: var(--h3-mono, ui-monospace, monospace);
+  font-size: calc(var(--size) * 0.032);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* "Coming soon" placeholders: muted, dashed */
+.fc .fc-fallback.is-soon {
+  background-color: #4a4a52 !important;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 10px, rgba(255, 255, 255, 0) 10px 20px);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.fc .fc-play.is-soon {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.fc .fc-play.is-soon:hover {
+  transform: none;
+}
+
+/* Category name above the game title */
+.fc-eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--h3-mono, ui-monospace, monospace);
+  font-size: clamp(12px, 1.1vw, 15px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}

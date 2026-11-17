@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Play } from "lucide-react";
 import { games, type Game } from "../catalog";
 import NavAccount from "../components/NavAccount";
-import { RiHomeSmile } from "../components/ReIcons";
+import { RiHomeSmile, RiSearchReicon } from "../components/ReIcons";
 import { inkFor } from "../components/FeatureCarousel";
 import "./home3.css";
 import "./games-globe.css";
@@ -61,6 +61,52 @@ export default function GamesGlobe() {
   const [activeIdx, setActiveIdx] = useState(startSlot);
   const active = slots[activeIdx].game;
   const goTo = useRef<(i: number) => void>(() => {});
+
+  // ---- search: filter by title or category, pick → spin that game to the front ----
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [hi, setHi] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [] as Game[];
+    const starts = games.filter((g) => g.title.toLowerCase().startsWith(q));
+    const rest = games.filter(
+      (g) => !starts.includes(g) && (g.title.toLowerCase().includes(q) || g.category.toLowerCase().includes(q)),
+    );
+    return [...starts, ...rest].slice(0, 6);
+  }, [query]);
+  useEffect(() => setHi(0), [query]);
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus();
+  }, [searchOpen]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery("");
+  };
+  /** Spin the globe to a game: prefer its copy on the equator (nearest a natural front view). */
+  const pickGame = (g: Game) => {
+    const candidates = slots.map((s, i) => ({ s, i })).filter(({ s }) => s.game.id === g.id);
+    const best = candidates.sort((a, b) => Math.abs(a.s.lat) - Math.abs(b.s.lat))[0];
+    if (best) goTo.current(best.i);
+    closeSearch();
+  };
+  const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSearch();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHi((h) => Math.min(h + 1, Math.max(0, results.length - 1)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHi((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter" && results[hi]) {
+      e.preventDefault();
+      pickGame(results[hi]);
+    }
+  };
 
   useEffect(() => {
     const sphere = sphereRef.current!;
@@ -177,6 +223,9 @@ export default function GamesGlobe() {
       vp -= e.deltaY * 0.01;
     };
     const onKey = (e: KeyboardEvent) => {
+      // Typing in the search box (or any field) must not spin the globe or leave the page
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       if (e.key === "Escape") navigate(-1);
       if (e.key === "Enter" && current >= 0 && document.activeElement === document.body) navigate(`/game/${slots[current].game.id}`);
       const step = 360 / 13;
@@ -270,6 +319,63 @@ export default function GamesGlobe() {
           <img className="gs-logo-light" src="/logo/logo-h-light-nav.webp" width={432} height={120} alt="" aria-hidden="true" />
         </Link>
         <div className="h3-nav-end">
+          <div className={`gs-search${searchOpen ? " is-open" : ""}`}>
+            {searchOpen ? (
+              <>
+                <input
+                  ref={searchRef}
+                  type="search"
+                  className="gs-search-input"
+                  placeholder="Search games…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={onSearchKey}
+                  onBlur={() => window.setTimeout(() => !query && closeSearch(), 150)}
+                  role="combobox"
+                  aria-expanded={results.length > 0}
+                  aria-controls="gs-search-results"
+                  aria-activedescendant={results[hi] ? `gs-r-${results[hi].id}` : undefined}
+                  aria-label="Search games"
+                  autoComplete="off"
+                />
+                {query.trim() ? (
+                  <ul className="gs-search-results" id="gs-search-results" role="listbox">
+                    {results.length ? (
+                      results.map((g, i) => (
+                        <li
+                          key={g.id}
+                          id={`gs-r-${g.id}`}
+                          role="option"
+                          aria-selected={i === hi}
+                          className={i === hi ? "is-hi" : ""}
+                          onMouseEnter={() => setHi(i)}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            pickGame(g);
+                          }}
+                        >
+                          <span className="gs-r-dot" style={{ background: g.accent }} />
+                          <span className="gs-r-title">{g.title}</span>
+                          <span className="gs-r-cat">{g.category}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="gs-r-empty">No games match "{query.trim()}"</li>
+                    )}
+                  </ul>
+                ) : null}
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="gs-icon-btn"
+              aria-label={searchOpen ? "Close search" : "Search games"}
+              title={searchOpen ? "Close search" : "Search"}
+              onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+            >
+              <RiSearchReicon size={21} aria-hidden="true" />
+            </button>
+          </div>
           <Link className="gs-home" to="/" aria-label="Home" title="Home">
             <RiHomeSmile size={22} aria-hidden="true" />
           </Link>
