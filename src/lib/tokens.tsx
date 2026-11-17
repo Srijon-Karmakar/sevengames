@@ -19,6 +19,8 @@ export type Subscription = {
 
 export type Wallet = {
   balance: number;
+  /** redeemed the developer / admin code: premium games are free */
+  unlimited: boolean;
   subscription: Subscription | null;
   ads_today: number;
   ad_daily_cap: number;
@@ -42,6 +44,7 @@ type Ctx = {
   subscribe: (plan: "monthly" | "yearly", currency: string) => Promise<void>;
   cancel: () => Promise<void>;
   history: () => Promise<LedgerRow[]>;
+  redeem: (code: string) => Promise<void>;
 };
 
 const TokensContext = createContext<Ctx | null>(null);
@@ -52,6 +55,9 @@ export function tokenErrorText(err: unknown) {
   if (msg.includes("ad_cap_reached")) return "You've reached today's ad limit — come back tomorrow.";
   if (msg.includes("ad_not_finished")) return "Watch the whole ad to earn tokens.";
   if (msg.includes("too_many_open_ads")) return "Finish the ad you already started first.";
+  if (msg.includes("bad_code")) return "That code isn't valid.";
+  if (msg.includes("too_many_attempts")) return "Too many wrong codes — try again in an hour.";
+  if (msg.includes("no_code_set")) return "That code isn't valid.";
   if (msg.includes("already_subscribed")) return "You already have a subscription.";
   if (msg.includes("mock_payments_disabled")) return "Payments aren't available yet.";
   if (msg.includes("not_signed_in")) return "Sign in first.";
@@ -122,6 +128,13 @@ export function TokensProvider({ children }: { children: ReactNode }) {
     setWallet(await rpc<Wallet>("cancel_subscription"));
   }, [rpc]);
 
+  const redeem = useCallback(async (code: string) => {
+    const res = await rpc<Wallet & { ok: boolean; reason?: string }>("redeem_code", { p_code: code });
+    if (!res.ok) throw new Error(res.reason ?? "bad_code");
+    const { ok: _ok, reason: _r, ...w } = res;
+    setWallet(w as Wallet);
+  }, [rpc]);
+
   const history = useCallback(async () => {
     if (!supabase || !user) return [];
     const { data } = await supabase
@@ -133,8 +146,8 @@ export function TokensProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const value = useMemo(
-    () => ({ wallet, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, cancel, history }),
-    [wallet, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, cancel, history],
+    () => ({ wallet, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, cancel, history, redeem }),
+    [wallet, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, cancel, history, redeem],
   );
   return <TokensContext.Provider value={value}>{children}</TokensContext.Provider>;
 }

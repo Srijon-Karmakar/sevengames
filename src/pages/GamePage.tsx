@@ -10,7 +10,7 @@ import { useBestForGame } from "../hooks/useBest";
 import Leaderboard from "../components/Leaderboard";
 import { trackGame } from "../lib/track";
 import { pushRecent } from "../lib/recent";
-import { useGameCost } from "../lib/tokens";
+import { useGameCost, useTokens } from "../lib/tokens";
 import { formatTokens } from "../lib/currency";
 import PlayGate from "../components/PlayGate";
 import "./game-page.css";
@@ -35,7 +35,9 @@ export default function GamePage() {
   // Tokens: premium games (cost > 0) are paid per play. `paidPlay` counts paid plays (it also
   // remounts the game fresh for each one); `locked` puts the gate back up after a finished match.
   const cost = useGameCost(game?.id);
-  const premium = (cost ?? 0) > 0;
+  const { wallet } = useTokens();
+  // unlimited accounts (redeem code) play premium games without the gate
+  const premium = (cost ?? 0) > 0 && !wallet?.unlimited;
   const premiumRef = useRef(premium);
   premiumRef.current = premium;
   const [paidPlay, setPaidPlay] = useState(0);
@@ -154,7 +156,9 @@ export default function GamePage() {
             <li>{game.difficulty}</li>
             <li>~{game.minutes} min</li>
             {cost !== null ? (
-              <li className={premium ? "gp-chip-cost" : "gp-chip-free"}>{premium ? `${formatTokens(cost)} tokens / play` : "Free"}</li>
+              <li className={premium ? "gp-chip-cost" : "gp-chip-free"}>
+                {premium ? `${formatTokens(cost)} tokens / play` : (cost ?? 0) > 0 ? "Unlimited" : "Free"}
+              </li>
             ) : null}
             {best !== null ? <li className="gp-chip-best">Best: {best}</li> : null}
           </ul>

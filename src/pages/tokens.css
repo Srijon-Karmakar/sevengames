@@ -633,3 +633,59 @@
     animation-duration: 2s;
   }
 }
+
+/* ---------- redeem code ---------- */
+.tk-unlimited {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f0c00;
+  background: linear-gradient(90deg, #ffe08a, #ff9d52);
+}
+
+.tk-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tk-link:hover {
+  color: var(--text, #fff);
+}
+
+.tk-redeem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 18px;
+}
+
+.tk-redeem svg {
+  flex: none;
+  color: #ff9d52;
+}
+
+.tk-redeem input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  font: inherit;
+  font-family: var(--h3-mono, ui-monospace, monospace);
+  letter-spacing: 0.06em;
+}

@@ -544,6 +544,37 @@ Deno.serve(async (req) => {
         return json({ ok: true, balance: data });
       }
 
+      /* ---- Redeem code → unlimited tokens (developers / admins) ---- */
+      case "redeem_info": {
+        const [secret, list] = await Promise.all([
+          db.from("token_secrets").select("updated_at").eq("key", "redeem_code_hash").maybeSingle(),
+          db.from("token_unlimited").select("user_id, email, via, granted_at").order("granted_at", { ascending: false }),
+        ]);
+        if (list.error) throw list.error;
+        return json({ code_set_at: secret.data?.updated_at ?? null, unlimited: list.data ?? [] });
+      }
+
+      case "redeem_code_set": {
+        const code = text(body.code, 64);
+        if (code.length < 6) return json({ error: "Use at least 6 characters" }, 400);
+        const { error } = await db.rpc("admin_set_redeem_code", { p_code: code });
+        if (error) throw error;
+        // optionally make everyone redeem the new code
+        if (body.revoke_existing === true) {
+          const { error: e2 } = await db.from("token_unlimited").delete().not("user_id", "is", null);
+          if (e2) throw e2;
+        }
+        return json({ ok: true });
+      }
+
+      case "unlimited_revoke": {
+        const userId = text(body.user_id, 60);
+        if (!userId) return json({ error: "Missing user" }, 400);
+        const { error } = await db.from("token_unlimited").delete().eq("user_id", userId);
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
       default:
         return json({ error: "Unknown action" }, 400);
     }

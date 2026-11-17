@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarClock, Coins, Gift, Gamepad2, Sparkles, Tv, X } from "lucide-react";
+import { CalendarClock, Coins, Gift, Gamepad2, KeyRound, Sparkles, Tv, X } from "lucide-react";
 import { useAuthContext } from "../context/AuthContext";
 import { tokenErrorText, usePlanPrices, useTokens, type LedgerRow } from "../lib/tokens";
 import { formatMoney, formatTokens, pickCurrency } from "../lib/currency";
@@ -21,7 +21,9 @@ const fmtDate = (iso: string) =>
 
 export default function TokensPage() {
   const { user } = useAuthContext();
-  const { wallet, loading, subscribe, cancel, history, refresh } = useTokens();
+  const { wallet, loading, subscribe, cancel, history, refresh, redeem } = useTokens();
+  const [code, setCode] = useState("");
+  const [codeOpen, setCodeOpen] = useState(false);
   const prices = usePlanPrices();
   const [adOpen, setAdOpen] = useState(false);
   const [checkout, setCheckout] = useState<"monthly" | "yearly" | null>(null);
@@ -58,6 +60,23 @@ export default function TokensPage() {
       await subscribe(checkout, currency);
       setNote(`Subscribed! ${formatTokens(perMonth)} tokens have been added.`);
       setCheckout(null);
+    } catch (err) {
+      setNote(tokenErrorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doRedeem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      await redeem(code.trim());
+      setCode("");
+      setCodeOpen(false);
+      setNote("Code redeemed — you now have unlimited tokens.");
     } catch (err) {
       setNote(tokenErrorText(err));
     } finally {
@@ -102,8 +121,16 @@ export default function TokensPage() {
           <Coins size={34} />
         </span>
         <p className="tk-hero-label">Your balance</p>
-        <h1 className="tk-balance">{wallet ? formatTokens(wallet.balance) : loading ? "…" : "—"}</h1>
-        <p className="tk-hero-sub">Free games are always free. Premium games use tokens per play.</p>
+        <h1 className="tk-balance">
+          {wallet ? (wallet.unlimited ? "∞" : formatTokens(wallet.balance)) : loading ? "…" : "—"}
+        </h1>
+        {wallet?.unlimited ? (
+          <span className="tk-unlimited">
+            <KeyRound size={14} aria-hidden="true" /> Unlimited — premium games are free for you
+          </span>
+        ) : (
+          <p className="tk-hero-sub">Free games are always free. Premium games use tokens per play.</p>
+        )}
         {!wallet && !loading ? (
           <button type="button" className="tk-btn" onClick={() => void refresh()}>
             Retry
@@ -200,6 +227,35 @@ export default function TokensPage() {
           </button>
         </div>
       </section>
+
+      {/* ---------- Redeem code (developers / admins) ---------- */}
+      {wallet && !wallet.unlimited ? (
+        <section className="tk-section">
+          {codeOpen ? (
+            <form className="tk-redeem card" onSubmit={(e) => void doRedeem(e)}>
+              <KeyRound size={18} aria-hidden="true" />
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Enter redeem code"
+                aria-label="Redeem code"
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                maxLength={64}
+                autoFocus
+              />
+              <button type="submit" className="tk-btn tk-btn-primary" disabled={busy || !code.trim()}>
+                Redeem
+              </button>
+            </form>
+          ) : (
+            <button type="button" className="tk-link" onClick={() => setCodeOpen(true)}>
+              Have a code?
+            </button>
+          )}
+        </section>
+      ) : null}
 
       {/* ---------- History ---------- */}
       <section className="tk-section">

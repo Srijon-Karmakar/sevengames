@@ -197,6 +197,8 @@ export default function TokensTab() {
         </div>
       </div>
 
+      <RedeemCard />
+
       {/* ---------- Grant / look up ---------- */}
       <div className="card adm-card adm-settings">
         <h3>Player tokens</h3>
@@ -299,5 +301,109 @@ function PlanRow({
         ) : null}
       </td>
     </tr>
+  );
+}
+
+/* ---------- Redeem code → unlimited tokens ---------- */
+
+type Unlimited = { user_id: string; email: string | null; via: string; granted_at: string };
+
+function RedeemCard() {
+  const [info, setInfo] = useState<{ code_set_at: string | null; unlimited: Unlimited[] } | null>(null);
+  const [code, setCode] = useState("");
+  const [revokeExisting, setRevokeExisting] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = () =>
+    adminCall<{ code_set_at: string | null; unlimited: Unlimited[] }>("redeem_info").then(setInfo, (e) =>
+      setMsg(errText(e, "Failed to load")),
+    );
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function save() {
+    setMsg("");
+    try {
+      await adminCall("redeem_code_set", { code: code.trim(), revoke_existing: revokeExisting });
+      setMsg(revokeExisting ? "New code saved. Everyone who used the old code has been removed." : "New code saved. The old code no longer works.");
+      setCode("");
+      setRevokeExisting(false);
+      await load();
+    } catch (e) {
+      setMsg(errText(e, "Failed"));
+    }
+  }
+
+  async function revoke(u: Unlimited) {
+    setMsg("");
+    try {
+      await adminCall("unlimited_revoke", { user_id: u.user_id });
+      setMsg(`Unlimited removed from ${u.email ?? u.user_id}.`);
+      await load();
+    } catch (e) {
+      setMsg(errText(e, "Failed"));
+    }
+  }
+
+  return (
+    <div className="card adm-card adm-settings">
+      <h3>Redeem code (unlimited tokens)</h3>
+      <p className="adm-note">
+        Developers and admins enter this code on the Tokens page (“Have a code?”) to get unlimited tokens — premium
+        games become free for that account. The code is stored hashed, so it can't be shown here; set a new one to change
+        it. {info ? (info.code_set_at ? `Last changed ${new Date(info.code_set_at).toLocaleString()}.` : "No code set yet.") : null}
+      </p>
+      <div className="adm-field">
+        <label>New code</label>
+        <input
+          value={code}
+          maxLength={64}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="at least 6 characters, e.g. SENEVON-DEV-2026"
+        />
+      </div>
+      <label className="adm-check">
+        <input type="checkbox" checked={revokeExisting} onChange={(e) => setRevokeExisting(e.target.checked)} /> Also remove
+        everyone who redeemed the old code
+      </label>
+      <div className="adm-actions">
+        <button type="button" className="primary-btn" disabled={code.trim().length < 6} onClick={() => void save()}>
+          {info?.code_set_at ? "Change code" : "Set code"}
+        </button>
+        {msg ? <span className="adm-note">{msg}</span> : null}
+      </div>
+      <div className="adm-table-wrap">
+        <table className="adm-table">
+          <thead>
+            <tr>
+              <th>Unlimited account</th>
+              <th>Since</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {(info?.unlimited ?? []).map((u) => (
+              <tr key={u.user_id}>
+                <td>{u.email ?? u.user_id}</td>
+                <td>{new Date(u.granted_at).toLocaleDateString()}</td>
+                <td>
+                  <button type="button" className="ghost-btn" onClick={() => void revoke(u)}>
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {info && !info.unlimited.length ? (
+              <tr>
+                <td colSpan={3}>Nobody has redeemed the code yet.</td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

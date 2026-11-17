@@ -12,9 +12,9 @@ export default function TokenPill() {
   // hidden for guests, and if the wallet can't load (e.g. tokens.sql not run yet)
   if (!user || (!wallet && !loading)) return null;
   return (
-    <Link to="/tokens" className="tk-pill" aria-label={`${wallet ? formatTokens(wallet.balance) : "Your"} tokens — get more`}>
+    <Link to="/tokens" className="tk-pill" aria-label={wallet?.unlimited ? "Unlimited tokens" : `${wallet ? formatTokens(wallet.balance) : "Your"} tokens — get more`}>
       <Coins size={15} aria-hidden="true" />
-      <b>{wallet ? formatTokens(wallet.balance) : "…"}</b>
+      <b>{wallet ? (wallet.unlimited ? "∞" : formatTokens(wallet.balance)) : "…"}</b>
     </Link>
   );
 }

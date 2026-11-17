@@ -14,6 +14,8 @@
 --       claim_ad_reward(view)   pays 50 tokens if the ad stayed open long enough
 --       mock_subscribe(...)     TEST checkout, only while payments_mode = "mock"
 --       cancel_subscription()
+--       redeem_code(code)       developer / admin code → unlimited tokens (code is stored
+--                               hashed, set from the admin panel, 5 wrong tries per hour)
 --   * Admin changes (prices, grants, payments mode) go through the `admin` Edge Function
 --     with the service-role key.
 --
@@ -101,6 +103,31 @@ create table if not exists public.ad_views (
 );
 create index if not exists ad_views_user_time on public.ad_views (user_id, started_at desc);
 
+-- 4b) Redeem code → unlimited tokens ----------------------------------
+create extension if not exists pgcrypto with schema extensions;
+
+-- server-only secrets (the redeem code's bcrypt hash). No policies: unreadable from the browser.
+create table if not exists public.token_secrets (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.token_unlimited (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  via text not null default 'code',
+  granted_at timestamptz not null default now()
+);
+
+create table if not exists public.redeem_attempts (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  ok boolean not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists redeem_attempts_user_time on public.redeem_attempts (user_id, created_at desc);
+
 -- 5) Row level security -------------------------------------------
 alter table public.token_wallets enable row level security;
 alter table public.token_ledger enable row level security;
@@ -108,6 +135,9 @@ alter table public.game_prices enable row level security;
 alter table public.plan_prices enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.ad_views enable row level security;
+alter table public.token_secrets enable row level security;
+alter table public.token_unlimited enable row level security;
+alter table public.redeem_attempts enable row level security;
 
 drop policy if exists "Own wallet" on public.token_wallets;
 create policy "Own wallet" on public.token_wallets for select to authenticated using (auth.uid() = user_id);
@@ -117,6 +147,8 @@ drop policy if exists "Own subscriptions" on public.subscriptions;
 create policy "Own subscriptions" on public.subscriptions for select to authenticated using (auth.uid() = user_id);
 drop policy if exists "Own ad views" on public.ad_views;
 create policy "Own ad views" on public.ad_views for select to authenticated using (auth.uid() = user_id);
+drop policy if exists "Own unlimited status" on public.token_unlimited;
+create policy "Own unlimited status" on public.token_unlimited for select to authenticated using (auth.uid() = user_id);
 drop policy if exists "Public game prices" on public.game_prices;
 create policy "Public game prices" on public.game_prices for select to anon, authenticated using (true);
 drop policy if exists "Public plan prices" on public.plan_prices;
@@ -212,6 +244,7 @@ language sql stable security definer set search_path = public
 as $$
   select jsonb_build_object(
     'balance', coalesce((select balance from token_wallets where user_id = p_user), 0),
+    'unlimited', exists (select 1 from token_unlimited where user_id = p_user),
     'subscription', (
       select to_jsonb(x) from (
         select id, plan, status, provider, currency, amount, started_at, period_end, next_credit_at
@@ -265,7 +298,8 @@ begin
   select cost into v_cost from game_prices where game_id = p_game;
   v_cost := coalesce(v_cost, 0);
   perform token_wallet(); -- make sure the wallet exists and due subscription tokens are in
-  if v_cost = 0 then
+  -- unlimited accounts (redeem code) never pay
+  if v_cost = 0 or exists (select 1 from token_unlimited where user_id = v_user) then
     return jsonb_build_object('ok', true, 'cost', 0) || _tok_state(v_user);
   end if;
   select balance into v_balance from token_wallets where user_id = v_user;
@@ -377,6 +411,52 @@ begin
 end;
 $$;
 
+-- Redeem the developer / admin code. A correct code makes the account unlimited.
+-- Wrong codes are recorded (not raised, so the record survives) and limited to 5 per hour.
+create or replace function public.redeem_code(p_code text)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_hash text;
+  v_code text := btrim(coalesce(p_code, ''));
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  if exists (select 1 from token_unlimited where user_id = v_user) then
+    return jsonb_build_object('ok', true) || _tok_state(v_user);
+  end if;
+  if (select count(*) from redeem_attempts
+      where user_id = v_user and not ok and created_at > now() - interval '1 hour') >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'too_many_attempts');
+  end if;
+  select value into v_hash from token_secrets where key = 'redeem_code_hash';
+  if v_hash is null or v_code = '' or extensions.crypt(v_code, v_hash) <> v_hash then
+    insert into redeem_attempts (user_id, ok) values (v_user, false);
+    return jsonb_build_object('ok', false, 'reason', case when v_hash is null then 'no_code_set' else 'bad_code' end);
+  end if;
+  insert into redeem_attempts (user_id, ok) values (v_user, true);
+  insert into token_unlimited (user_id, email, via)
+  values (v_user, (select email from auth.users where id = v_user), 'code')
+  on conflict (user_id) do nothing;
+  perform token_wallet();
+  return jsonb_build_object('ok', true) || _tok_state(v_user);
+end;
+$$;
+
+-- Set / change the redeem code (service role only — admin panel). Stored as a bcrypt hash.
+create or replace function public.admin_set_redeem_code(p_code text)
+returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if length(btrim(coalesce(p_code, ''))) < 6 then raise exception 'code_too_short'; end if;
+  insert into token_secrets (key, value, updated_at)
+  values ('redeem_code_hash', extensions.crypt(btrim(p_code), extensions.gen_salt('bf', 10)), now())
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+end;
+$$;
+
 -- Admin grant (service role only — used by the admin Edge Function).
 create or replace function public.admin_grant_tokens(p_user uuid, p_amount integer, p_note text)
 returns integer
@@ -394,6 +474,10 @@ revoke all on function public._tok_ads_today(uuid) from public, anon, authentica
 revoke all on function public._tok_state(uuid) from public, anon, authenticated;
 revoke all on function public.admin_grant_tokens(uuid, integer, text) from public, anon, authenticated;
 grant execute on function public.admin_grant_tokens(uuid, integer, text) to service_role;
+revoke all on function public.admin_set_redeem_code(text) from public, anon, authenticated;
+grant execute on function public.admin_set_redeem_code(text) to service_role;
+revoke all on function public.redeem_code(text) from public, anon;
+grant execute on function public.redeem_code(text) to authenticated;
 
 revoke all on function public.token_wallet() from public, anon;
 revoke all on function public.spend_for_play(text) from public, anon;
