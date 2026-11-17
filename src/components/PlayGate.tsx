@@ -9,7 +9,7 @@ import "../pages/tokens.css";
 
 /*
  * Covers a premium game until the player pays for a play.
- *  - guests: sign in (new accounts get the welcome bonus)
+ *  - guests: pay from the browser guest wallet; once it runs out, sign in
  *  - enough tokens: "Play · N tokens"
  *  - not enough: watch an ad or get tokens
  * `again` = shown after a finished match ("Play again").
@@ -28,13 +28,14 @@ export default function PlayGate({
   onPaid: () => void;
 }) {
   const { user } = useAuthContext();
-  const { wallet, spendForPlay } = useTokens();
+  const { wallet, guestBalance, spendForPlay } = useTokens();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adOpen, setAdOpen] = useState(false);
 
   const balance = wallet?.balance ?? 0;
   const short = Boolean(wallet) && balance < cost;
+  const guestShort = guestBalance !== null && guestBalance < cost;
 
   async function pay() {
     setBusy(true);
@@ -58,11 +59,28 @@ export default function PlayGate({
 
         {!user ? (
           <>
-            <p>Sign in to play premium games. New accounts get 1,000 free tokens.</p>
-            <Link className="tk-btn tk-btn-primary" to={`/login?next=/game/${gameId}`}>
-              <Lock size={16} aria-hidden="true" />
-              Sign in to play
-            </Link>
+            <p className="tk-gate-balance">
+              Guest tokens: <b>{guestBalance === null ? "…" : formatTokens(guestBalance)}</b>
+            </p>
+            {guestBalance !== null && !guestShort ? (
+              <>
+                <button type="button" className="tk-btn tk-btn-primary" disabled={busy} onClick={() => void pay()}>
+                  <Play size={16} aria-hidden="true" />
+                  {busy ? "Starting…" : `${again ? "Play again" : "Play"} · ${formatTokens(cost)} tokens`}
+                </button>
+                <p className="tk-gate-note">
+                  <Link to={`/login?next=/game/${gameId}`}>Sign in</Link> for 1,000 free tokens. Unspent guest tokens come with you.
+                </p>
+              </>
+            ) : guestBalance !== null ? (
+              <>
+                <p>You're out of guest tokens. Sign in to get 1,000 free tokens and earn more by watching ads. Unspent guest tokens come with you.</p>
+                <Link className="tk-btn tk-btn-primary" to={`/login?next=/game/${gameId}`}>
+                  <Lock size={16} aria-hidden="true" />
+                  Sign in to keep playing
+                </Link>
+              </>
+            ) : null}
           </>
         ) : (
           <>

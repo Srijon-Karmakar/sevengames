@@ -1,4 +1,5 @@
-/* Tokens: wallet state for the signed-in player, per-game prices and subscription prices.
+/* Tokens: wallet state for the signed-in player (plus a browser-only guest wallet),
+   per-game prices and subscription prices.
    Every change goes through Supabase RPC functions (supabase/tokens.sql) that enforce the
    rules on the server; this file only calls them and shares the result across the app. */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -34,14 +35,45 @@ export type LedgerRow = { id: number; delta: number; balance_after: number; reas
 
 export type SpendResult = { ok: true; cost: number } | { ok: false; reason: "insufficient" | "signin" | "error"; cost: number; message?: string };
 
+/* ---------- guest wallet (browser only) ----------
+   Guests get GUEST_TOKENS once per device, kept in localStorage. It can be reset by clearing
+   site data, which is accepted: on sign-in the server credits at most GUEST_TOKENS, once per
+   account (claim_guest_tokens). After any sign-in on this device the guest wallet is spent. */
+export const GUEST_TOKENS = 300;
+const GUEST_KEY = "senevon:guest-wallet";
+type GuestWallet = { balance: number; claimed: boolean };
+
+function readGuest(): GuestWallet | null {
+  try {
+    const raw = localStorage.getItem(GUEST_KEY);
+    if (!raw) return null;
+    const g = JSON.parse(raw) as Partial<GuestWallet>;
+    const balance = Math.min(GUEST_TOKENS, Math.max(0, Math.floor(Number(g.balance) || 0)));
+    return { balance, claimed: Boolean(g.claimed) };
+  } catch {
+    return null;
+  }
+}
+
+function writeGuest(g: GuestWallet) {
+  try {
+    localStorage.setItem(GUEST_KEY, JSON.stringify(g));
+  } catch {
+    /* storage blocked: the in-memory balance still works for this visit */
+  }
+}
+
 type Ctx = {
   wallet: Wallet | null;
+  /** guest's browser balance; null when signed in */
+  guestBalance: number | null;
   loading: boolean;
   refresh: () => Promise<void>;
   spendForPlay: (gameId: string) => Promise<SpendResult>;
   startAdView: (source: "network" | "house", adId?: string | null) => Promise<string>;
   claimAd: (viewId: string) => Promise<void>;
   subscribe: (plan: "monthly" | "yearly", currency: string) => Promise<void>;
+  buyPack: (pack: string, currency: string) => Promise<void>;
   cancel: () => Promise<void>;
   history: () => Promise<LedgerRow[]>;
   redeem: (code: string) => Promise<void>;
@@ -56,6 +88,7 @@ export function tokenErrorText(err: unknown) {
   if (msg.includes("ad_not_finished")) return "Watch the whole ad to earn tokens.";
   if (msg.includes("too_many_open_ads")) return "Finish the ad you already started first.";
   if (msg.includes("bad_code")) return "That code isn't valid.";
+  if (msg.includes("bad_pack")) return "That pack isn't available any more.";
   if (msg.includes("too_many_attempts")) return "Too many wrong codes — try again in an hour.";
   if (msg.includes("no_code_set")) return "That code isn't valid.";
   if (msg.includes("already_subscribed")) return "You already have a subscription.";
@@ -66,7 +99,7 @@ export function tokenErrorText(err: unknown) {
 }
 
 export function TokensProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuthContext();
+  const { user, loading: authLoading } = useAuthContext();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -77,6 +110,21 @@ export function TokensProvider({ children }: { children: ReactNode }) {
     return data as T;
   }, []);
 
+  const [guestBalance, setGuestBalance] = useState<number | null>(null);
+  useEffect(() => {
+    // wait for the session check so a signed-in player never gets a fresh guest wallet
+    if (user || authLoading) {
+      setGuestBalance(null);
+      return;
+    }
+    let g = readGuest();
+    if (!g) {
+      g = { balance: GUEST_TOKENS, claimed: false };
+      writeGuest(g);
+    }
+    setGuestBalance(g.balance);
+  }, [user, authLoading]);
+
   const refresh = useCallback(async () => {
     if (!user || !supabase) {
       setWallet(null);
@@ -84,6 +132,20 @@ export function TokensProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
+      // carry unspent guest tokens over to the account (server caps it and allows it once)
+      const g = readGuest();
+      if (!g || (!g.claimed && g.balance === 0)) {
+        writeGuest({ balance: 0, claimed: true });
+      } else if (!g.claimed) {
+        try {
+          const w = await rpc<Wallet>("claim_guest_tokens", { p_amount: g.balance });
+          writeGuest({ balance: 0, claimed: true });
+          setWallet(w);
+          return;
+        } catch {
+          /* server not updated yet: keep the guest tokens and try again next time */
+        }
+      }
       setWallet(await rpc<Wallet>("token_wallet"));
     } catch {
       setWallet(null);
@@ -98,7 +160,17 @@ export function TokensProvider({ children }: { children: ReactNode }) {
 
   const spendForPlay = useCallback(
     async (gameId: string): Promise<SpendResult> => {
-      if (!user) return { ok: false, reason: "signin", cost: 0 };
+      if (!user) {
+        const prices = await loadGamePrices();
+        const cost = prices[gameId] ?? 0;
+        const g = readGuest() ?? { balance: guestBalance ?? 0, claimed: false };
+        if (cost === 0) return { ok: true, cost: 0 };
+        if (g.balance < cost) return { ok: false, reason: "insufficient", cost };
+        const balance = g.balance - cost;
+        writeGuest({ ...g, balance });
+        setGuestBalance(balance);
+        return { ok: true, cost };
+      }
       try {
         const res = await rpc<Wallet & { ok: boolean; cost: number; reason?: string }>("spend_for_play", { p_game: gameId });
         const { ok, cost, reason: _r, ...w } = res;
@@ -108,7 +180,7 @@ export function TokensProvider({ children }: { children: ReactNode }) {
         return { ok: false, reason: "error", cost: 0, message: tokenErrorText(err) };
       }
     },
-    [user, rpc],
+    [user, rpc, guestBalance],
   );
 
   const startAdView = useCallback(
@@ -122,6 +194,10 @@ export function TokensProvider({ children }: { children: ReactNode }) {
 
   const subscribe = useCallback(async (plan: "monthly" | "yearly", currency: string) => {
     setWallet(await rpc<Wallet>("mock_subscribe", { p_plan: plan, p_currency: currency }));
+  }, [rpc]);
+
+  const buyPack = useCallback(async (pack: string, currency: string) => {
+    setWallet(await rpc<Wallet>("mock_buy_pack", { p_pack: pack, p_currency: currency }));
   }, [rpc]);
 
   const cancel = useCallback(async () => {
@@ -146,8 +222,8 @@ export function TokensProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const value = useMemo(
-    () => ({ wallet, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, cancel, history, redeem }),
-    [wallet, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, cancel, history, redeem],
+    () => ({ wallet, guestBalance, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, buyPack, cancel, history, redeem }),
+    [wallet, guestBalance, loading, refresh, spendForPlay, startAdView, claimAd, subscribe, buyPack, cancel, history, redeem],
   );
   return <TokensContext.Provider value={value}>{children}</TokensContext.Provider>;
 }
@@ -206,4 +282,40 @@ export function usePlanPrices() {
     };
   }, []);
   return rows;
+}
+
+export type TokenPack = { id: string; tokens: number; bonus: number; prices: Record<string, number> };
+
+/** One-off token packs with their prices per currency (public). */
+export function useTokenPacks() {
+  const [packs, setPacks] = useState<TokenPack[] | null>(null);
+  useEffect(() => {
+    if (!supabase) {
+      setPacks([]);
+      return;
+    }
+    let alive = true;
+    void Promise.all([
+      supabase.from("token_packs").select("id, tokens, bonus, sort").order("sort"),
+      supabase.from("pack_prices").select("pack, currency, amount"),
+    ]).then(
+      ([p, pr]) => {
+        if (!alive) return;
+        const prices = (pr.data ?? []) as { pack: string; currency: string; amount: number }[];
+        setPacks(
+          ((p.data ?? []) as { id: string; tokens: number; bonus: number }[]).map((r) => ({
+            id: r.id,
+            tokens: Number(r.tokens),
+            bonus: Number(r.bonus),
+            prices: Object.fromEntries(prices.filter((x) => x.pack === r.id).map((x) => [x.currency, Number(x.amount)])),
+          })),
+        );
+      },
+      () => alive && setPacks([]),
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return packs;
 }

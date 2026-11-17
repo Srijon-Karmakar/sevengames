@@ -790,11 +790,11 @@
 .site[data-gtheme] .tk-pill {
   border: 0;
   color: var(--text, inherit);
-  background: var(--neu-bg);
-  box-shadow: var(--neu-raise-sm);
+  background: transparent;
+  box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  transition: box-shadow 0.22s var(--neu-ease), transform 0.45s var(--neu-spring);
+  transition: opacity 0.2s ease, transform 0.45s var(--neu-spring);
 }
 
 .site[data-gtheme="light"] .tk-pill {
@@ -811,17 +811,12 @@
 
 @media (hover: hover) {
   .site[data-gtheme] .tk-pill:hover {
-    background: var(--neu-bg);
-    box-shadow: var(--neu-half);
-    transform: translateY(1px) scale(0.985);
-    transition-duration: 0.14s;
+    opacity: 0.8;
   }
 }
 
 .site[data-gtheme] .tk-pill:active {
-  box-shadow: var(--neu-press);
-  transform: translateY(2px) scale(0.96);
-  transition-duration: 0.07s;
+  transform: scale(0.96);
 }
 
 .site[data-gtheme] .gp-chips .gp-chip-cost {
@@ -890,4 +885,9 @@
 
 .site[data-gtheme] .gp-stage .tk-btn-primary:active:not(:disabled) {
   box-shadow: var(--neu-orange-press);
+}
+
+.site[data-gtheme] .gp-guest.gp-nudge {
+  background: var(--neu-bg);
+  box-shadow: var(--neu-raise, 0 10px 30px rgba(0, 0, 0, 0.25));
 }

@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { ArrowRight, Coins, Gamepad2, History, LogOut, Pencil, Trophy } from "lucide-react";
 import { useAuthContext } from "../context/AuthContext";
 import { useAvatar } from "../lib/avatar";
 import AvatarLibrary from "../components/AvatarLibrary";
+import { GamePoster } from "../components/GamePoster";
 import { games, scoreLabel } from "../catalog";
 import { isLowerBetter, usePersonalScores } from "../lib/scores";
+import { useTokens } from "../lib/tokens";
+import { formatTokens } from "../lib/currency";
+import "./account.css";
+import "./profile.css";
 
 export default function Profile() {
   const auth = useAuthContext();
@@ -14,7 +19,12 @@ export default function Profile() {
   const { scores } = usePersonalScores(user);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const { uri: avatarUri } = useAvatar(user);
+  const { wallet, loading: walletLoading } = useTokens();
   const location = useLocation();
+
+  useEffect(() => {
+    document.title = "Profile — Senevon Game Studio";
+  }, []);
 
   // "/profile#avatars" (from the nav avatar menu) jumps straight to the library.
   useEffect(() => {
@@ -32,7 +42,7 @@ export default function Profile() {
     }
     const meta = user.user_metadata ?? {};
     setDisplayName(
-      (meta.full_name as string | undefined) || (meta.name as string | undefined) || (user.email ?? "Player"),
+      (meta.full_name as string | undefined) || (meta.name as string | undefined) || (user.email?.split("@")[0] ?? "Player"),
     );
   }, [user, navigate]);
 
@@ -40,7 +50,10 @@ export default function Profile() {
 
   const totalPlays = scores.length;
   const playedGameIds = [...new Set(scores.map((score) => score.gameId))];
-  const favorite = playedGameIds[0] ? games.find((game) => game.id === playedGameIds[0]) : null;
+  const latest = playedGameIds[0] ? games.find((game) => game.id === playedGameIds[0]) : null;
+  const since = user.created_at
+    ? new Date(user.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" })
+    : null;
 
   function bestFor(gameId: string) {
     const lowerBetter = isLowerBetter(gameId);
@@ -53,77 +66,140 @@ export default function Profile() {
   }
 
   return (
-    <div className="page narrow profile-page">
-      <div className="profile-head card">
-        <a href="#avatars" className="profile-avatar" aria-label="Change avatar">
+    <div className="acct pf">
+      {/* ---------- identity ---------- */}
+      <section className="ac-card pf-hero">
+        <a href="#avatars" className="pf-avatar" aria-label="Change avatar">
           {avatarUri ? (
-            <img className="avatar" src={avatarUri} alt="" width={128} height={128} />
+            <img src={avatarUri} alt="" width={128} height={128} />
           ) : (
-            <span className="avatar avatar-initial">{(displayName ?? "?").charAt(0).toUpperCase()}</span>
+            <span className="pf-avatar-initial">{(displayName ?? "?").charAt(0).toUpperCase()}</span>
           )}
+          <span className="pf-avatar-edit" aria-hidden="true">
+            <Pencil size={13} />
+          </span>
         </a>
-        <div>
-          <p className="eyebrow">Global account</p>
-          <h1>{displayName}</h1>
-          <p className="hero-sub">{user.email}</p>
+        <div className="pf-id">
+          <span className="pf-eyebrow">Player profile</span>
+          <h1 className="pf-name">{displayName}</h1>
+          <p className="pf-meta">
+            <span className="pf-email">{user.email}</span>
+            {since ? <span>Joined {since}</span> : null}
+          </p>
         </div>
         <button
           type="button"
-          className="ghost-btn"
+          className="ac-btn ac-btn-sm pf-signout"
           onClick={async () => {
             await auth.signOut();
             navigate("/");
           }}
         >
-          <LogOut size={15} />
+          <LogOut size={15} aria-hidden="true" />
           Sign out
         </button>
-      </div>
-
-      <div className="stats-row">
-        <div className="metric card">
-          <strong>{totalPlays}</strong>
-          <span>Rounds played</span>
-        </div>
-        <div className="metric card">
-          <strong>{playedGameIds.length}</strong>
-          <span>Games tried</span>
-        </div>
-        <div className="metric card">
-          <strong>{favorite ? favorite.title : "—"}</strong>
-          <span>Latest game</span>
-        </div>
-      </div>
-
-      <section className="profile-avatars card" id="avatars">
-        <h2>Avatar library</h2>
-        <p className="text-secondary">Pick a style, then a character. Shuffle for more. It follows your account to every device.</p>
-        <AvatarLibrary user={user} />
       </section>
 
-      <section className="profile-scores">
-        <h2>Your bests</h2>
-        {playedGameIds.length === 0 ? (
-          <p className="empty-note">
-            No rounds yet. <Link to="/">Pick a game</Link> and set your first record.
-          </p>
-        ) : (
-          <ul className="profile-score-list">
-            {playedGameIds.map((gameId) => {
-              const game = games.find((item) => item.id === gameId);
-              if (!game) return null;
-              return (
-                <li key={gameId}>
-                  <Link to={`/game/${game.id}`}>{game.title}</Link>
-                  <span>
-                    {scoreLabel(game)}: {bestFor(gameId)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+      {/* ---------- wallet + stats ---------- */}
+      <div className="pf-overview">
+        <section className="ac-card ac-coin-card pf-wallet" aria-label="Token wallet">
+          <div className="pf-wallet-top">
+            <span className="ac-coin" aria-hidden="true">
+              <Coins size={24} />
+            </span>
+            <div>
+              <span className="pf-wallet-label">Token balance</span>
+              <strong className="pf-wallet-num">
+                {wallet ? (wallet.unlimited ? "∞" : formatTokens(wallet.balance)) : walletLoading ? "…" : "—"}
+              </strong>
+            </div>
+          </div>
+          <div className="pf-wallet-actions">
+            <Link className="ac-btn ac-btn-sm" to="/tokens#buy">
+              Buy tokens
+            </Link>
+            <Link className="ac-btn ac-btn-sm ac-btn-ghost" to="/tokens">
+              Wallet <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+
+        <div className="pf-stats">
+          <div className="ac-card pf-stat">
+            <span className="pf-stat-icon" aria-hidden="true">
+              <History size={17} />
+            </span>
+            <strong>{formatTokens(totalPlays)}</strong>
+            <span>Rounds played</span>
+          </div>
+          <div className="ac-card pf-stat">
+            <span className="pf-stat-icon" aria-hidden="true">
+              <Gamepad2 size={17} />
+            </span>
+            <strong>{playedGameIds.length}</strong>
+            <span>Games tried</span>
+          </div>
+          <div className="ac-card pf-stat">
+            <span className="pf-stat-icon" aria-hidden="true">
+              <Trophy size={17} />
+            </span>
+            {latest ? (
+              <Link to={`/game/${latest.id}`} className="pf-stat-text" title={latest.title}>
+                {latest.title}
+              </Link>
+            ) : (
+              <strong>—</strong>
+            )}
+            <span>Latest game</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- avatars + bests ---------- */}
+      <div className="pf-columns">
+        <section className="ac-card pf-avatars" id="avatars">
+          <div className="ac-section-head">
+            <div>
+              <h2 className="ac-h2">Avatar library</h2>
+              <p className="ac-sub">Pick a style, then a character. It follows your account to every device.</p>
+            </div>
+          </div>
+          <AvatarLibrary user={user} />
+        </section>
+
+        <section className="ac-card pf-bests">
+          <div className="ac-section-head">
+            <h2 className="ac-h2">Your bests</h2>
+          </div>
+          {playedGameIds.length === 0 ? (
+            <div className="pf-empty">
+              <p>No rounds yet. Pick a game and set your first record.</p>
+              <Link className="ac-btn ac-btn-primary ac-btn-sm" to="/games">
+                Browse games
+              </Link>
+            </div>
+          ) : (
+            <ul className="pf-best-list">
+              {playedGameIds.map((gameId) => {
+                const game = games.find((item) => item.id === gameId);
+                if (!game) return null;
+                return (
+                  <li key={gameId}>
+                    <Link to={`/game/${game.id}`}>
+                      <GamePoster game={game} size="thumb" />
+                      <span className="pf-best-title">{game.title}</span>
+                      <span className="pf-best-score">
+                        <small>{scoreLabel(game)}</small>
+                        <b>{bestFor(gameId)}</b>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

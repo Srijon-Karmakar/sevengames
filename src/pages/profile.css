@@ -1,0 +1,402 @@
+/* ============================================================
+   Profile page (theme tokens come from account.css)
+   ============================================================ */
+
+/* ---------- identity ---------- */
+.pf-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(14px, 2.5vw, 24px);
+}
+
+.pf-avatar {
+  position: relative;
+  display: block;
+  width: clamp(72px, 10vw, 96px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  padding: 4px;
+  background: var(--ac-bg);
+  box-shadow: var(--ac-raise-sm), 0 0 0 2px var(--ac-accent);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pf-avatar:hover {
+  transform: scale(1.04) rotate(-3deg);
+}
+
+.pf-avatar img,
+.pf-avatar-initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  font-size: 32px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(145deg, #ff9d52, #ec5f00);
+}
+
+.pf-avatar-edit {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(145deg, #ff9d52, #ec5f00);
+  box-shadow: 0 0 0 3px var(--ac-bg);
+}
+
+.pf-id {
+  min-width: 0;
+}
+
+.pf-eyebrow {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ac-accent);
+}
+
+.pf-name {
+  font-size: clamp(24px, 3.6vw, 36px) !important;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.pf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px !important;
+  font-size: 14px;
+  color: var(--ac-muted);
+}
+
+.pf-email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pf-meta span + span::before {
+  content: "•";
+  margin-right: 14px;
+  color: var(--ac-faint);
+}
+
+/* ---------- wallet + stats ---------- */
+.pf-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 2fr);
+  gap: clamp(16px, 2.4vw, 24px);
+}
+
+.pf-wallet {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.pf-wallet-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pf-wallet-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.pf-wallet-num {
+  display: block;
+  font-size: clamp(28px, 4vw, 38px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-wallet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pf-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(12px, 2vw, 20px);
+}
+
+.pf-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: clamp(14px, 2.4vw, 22px);
+}
+
+.pf-stat-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  color: var(--ac-accent);
+  box-shadow: var(--ac-well);
+}
+
+.pf-stat strong,
+.pf-stat-text {
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-stat-text {
+  display: block;
+  overflow: hidden;
+  font-size: clamp(15px, 1.8vw, 18px);
+  text-decoration: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pf-stat-text:hover {
+  color: var(--ac-accent) !important;
+}
+
+.pf-stat > span:last-child {
+  font-size: 13px;
+  color: var(--ac-muted);
+}
+
+/* ---------- avatars + bests ---------- */
+.pf-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.4vw, 24px);
+  align-items: start;
+}
+
+.pf-avatars {
+  scroll-margin-top: 96px;
+}
+
+/* restyle the shared avatar library for this page and both themes */
+.pf .avl-head {
+  flex-wrap: wrap;
+}
+
+.pf .avl-styles {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.pf .avl-styles button,
+.pf .avl-shuffle {
+  padding: 7px 14px;
+  border: 0;
+  color: var(--ac-text);
+  background: var(--ac-bg);
+  box-shadow: var(--ac-raise-sm);
+}
+
+.pf .avl-styles button.active {
+  color: #fff;
+  background: linear-gradient(145deg, #ff9d52, #ec5f00);
+  box-shadow: 0 8px 18px -10px rgba(236, 95, 0, 0.8);
+}
+
+.pf .avl-shuffle:hover {
+  box-shadow: var(--ac-raise-sm);
+  color: var(--ac-accent);
+}
+
+.pf .avl-grid {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 12px;
+}
+
+.pf .avl-tile {
+  background: var(--ac-bg);
+  box-shadow: var(--ac-well);
+}
+
+.pf .avl-tile:hover {
+  border-color: transparent;
+  box-shadow: var(--ac-raise-sm);
+}
+
+.pf .avl-tile.selected {
+  border-color: var(--ac-accent);
+}
+
+.pf-empty {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ac-muted);
+  box-shadow: var(--ac-well);
+}
+
+.pf-best-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-best-list a {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 16px;
+  text-decoration: none;
+  box-shadow: var(--ac-well);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.pf-best-list a:hover {
+  box-shadow: var(--ac-raise-sm);
+}
+
+.pf-best-list a:active {
+  transform: scale(0.99);
+}
+
+.pf-best-list .poster {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pf-best-title {
+  overflow: hidden;
+  font-size: 14.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pf-best-score {
+  display: grid;
+  justify-items: end;
+  line-height: 1.2;
+}
+
+.pf-best-score small {
+  font-size: 11px;
+  color: var(--ac-muted);
+}
+
+.pf-best-score b {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ac-accent);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1100px) {
+  .pf-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .pf-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .pf-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pf-signout {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .pf-meta {
+    flex-direction: column;
+  }
+
+  .pf-meta span + span::before {
+    content: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .pf-stats {
+    gap: 10px;
+  }
+
+  .pf-stat {
+    padding: 14px 12px;
+    border-radius: 18px;
+  }
+
+  .pf-stat-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .pf-stat strong {
+    font-size: 22px;
+  }
+
+  .pf-stat > span:last-child {
+    font-size: 11.5px;
+  }
+
+  .pf .avl-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .pf-hero {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+  }
+
+  .pf-meta {
+    align-items: center;
+  }
+
+  .pf .avl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

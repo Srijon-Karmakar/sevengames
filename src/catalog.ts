@@ -31,7 +31,8 @@ export type GameEngine =
   | "stack"
   | "dodge"
   | "connect-four"
-  | "lights-out";
+  | "lights-out"
+  | "arrows";
 
 export type Game = {
   id: string;
@@ -387,6 +388,17 @@ export const games: Game[] = [
     minutes: 5,
     accent: "#ffd60a",
     description: "Each tap flips a light and its neighbours. Switch them all off in few moves.",
+  },
+  {
+    id: "arrows",
+    title: "Arrows",
+    category: "Puzzle",
+    kind: "builtin",
+    engine: "arrows",
+    difficulty: "Medium",
+    minutes: 5,
+    accent: "#ff8a3d",
+    description: "Tap an arrow to send it off the board — but only if its way out is clear. Clear the maze, three lives.",
   },
 ];
 

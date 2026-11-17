@@ -40,7 +40,7 @@ create table if not exists public.token_ledger (
   user_id uuid not null references auth.users(id) on delete cascade,
   delta integer not null,
   balance_after integer not null,
-  reason text not null check (reason in ('signup', 'play', 'ad', 'subscription', 'admin')),
+  reason text not null check (reason in ('signup', 'play', 'ad', 'subscription', 'admin', 'guest', 'purchase')),
   ref text,
   created_at timestamptz not null default now()
 );
@@ -48,6 +48,12 @@ create table if not exists public.token_ledger (
 create index if not exists token_ledger_user_time on public.token_ledger (user_id, created_at desc);
 -- the signup bonus can only ever be granted once per account
 create unique index if not exists token_ledger_one_signup on public.token_ledger (user_id) where reason = 'signup';
+-- databases created before guest carry-over existed: widen the reason check
+alter table public.token_ledger drop constraint if exists token_ledger_reason_check;
+alter table public.token_ledger add constraint token_ledger_reason_check
+  check (reason in ('signup', 'play', 'ad', 'subscription', 'admin', 'guest', 'purchase'));
+-- guest tokens can only be carried over once per account
+create unique index if not exists token_ledger_one_guest on public.token_ledger (user_id) where reason = 'guest';
 -- each subscription credit is unique (stops double credits if two requests race)
 create unique index if not exists token_ledger_sub_ref on public.token_ledger (ref) where reason = 'subscription';
 
@@ -160,6 +166,7 @@ create or replace function public._tok_const(p_name text)
 returns integer language sql immutable as $$
   select case p_name
     when 'signup_bonus' then 1000
+    when 'guest_tokens' then 300     -- starting balance of a guest's browser wallet
     when 'sub_tokens' then 5000      -- per month, both plans
     when 'ad_reward' then 50
     when 'ad_daily_cap' then 10
@@ -491,3 +498,93 @@ grant execute on function public.start_ad_view(text, uuid) to authenticated;
 grant execute on function public.claim_ad_reward(uuid) to authenticated;
 grant execute on function public.mock_subscribe(text, text) to authenticated;
 grant execute on function public.cancel_subscription() to authenticated;
+
+-- 9) Guest carry-over -------------------------------------------------
+-- Guests play premium games from a 300-token wallet kept in their browser. On sign-in the
+-- unspent amount moves to the account. The browser reports the amount, so it is capped at
+-- the guest starting balance and credited at most once per account.
+create or replace function public.claim_guest_tokens(p_amount integer)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_amount integer := least(greatest(coalesce(p_amount, 0), 0), _tok_const('guest_tokens'));
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  perform token_wallet(); -- signup bonus first
+  if v_amount > 0 and not exists (select 1 from token_ledger where user_id = v_user and reason = 'guest') then
+    begin
+      perform _tok_credit(v_user, v_amount, 'guest', 'carry-over');
+    exception when unique_violation then
+      null;
+    end;
+  end if;
+  return _tok_state(v_user);
+end;
+$$;
+
+revoke all on function public.claim_guest_tokens(integer) from public, anon;
+grant execute on function public.claim_guest_tokens(integer) to authenticated;
+
+-- 10) Token packs (one-off purchases) ---------------------------------
+create table if not exists public.token_packs (
+  id text primary key,                 -- e.g. 'starter'
+  tokens integer not null check (tokens > 0),
+  bonus integer not null default 0 check (bonus >= 0),   -- extra tokens on top
+  sort integer not null default 0,
+  active boolean not null default true
+);
+
+create table if not exists public.pack_prices (
+  pack text not null references public.token_packs(id) on delete cascade,
+  currency text not null,              -- ISO 4217
+  amount numeric(10, 2) not null check (amount > 0),
+  primary key (pack, currency)
+);
+
+insert into public.token_packs (id, tokens, bonus, sort) values
+  ('starter', 500, 0, 1),
+  ('player', 1200, 200, 2),
+  ('pro', 3000, 750, 3),
+  ('legend', 7500, 2500, 4)
+on conflict (id) do nothing;
+
+insert into public.pack_prices (pack, currency, amount) values
+  ('starter', 'INR', 29), ('player', 'INR', 59), ('pro', 'INR', 129), ('legend', 'INR', 299),
+  ('starter', 'USD', 0.49), ('player', 'USD', 0.99), ('pro', 'USD', 1.99), ('legend', 'USD', 4.99),
+  ('starter', 'EUR', 0.49), ('player', 'EUR', 0.99), ('pro', 'EUR', 1.99), ('legend', 'EUR', 4.49),
+  ('starter', 'GBP', 0.45), ('player', 'GBP', 0.89), ('pro', 'GBP', 1.79), ('legend', 'GBP', 3.99)
+on conflict (pack, currency) do nothing;
+
+alter table public.token_packs enable row level security;
+alter table public.pack_prices enable row level security;
+drop policy if exists "Public token packs" on public.token_packs;
+create policy "Public token packs" on public.token_packs for select to anon, authenticated using (active);
+drop policy if exists "Public pack prices" on public.pack_prices;
+create policy "Public pack prices" on public.pack_prices for select to anon, authenticated using (true);
+
+-- TEST purchase of a pack. Refuses unless payments_mode is "mock". A real provider will
+-- credit packs from its webhook (service role) instead.
+create or replace function public.mock_buy_pack(p_pack text, p_currency text)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_mode text;
+  v_tokens integer;
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  select value #>> '{}' into v_mode from site_settings where key = 'payments_mode';
+  if coalesce(v_mode, 'mock') <> 'mock' then raise exception 'mock_payments_disabled'; end if;
+  select tokens + bonus into v_tokens from token_packs where id = p_pack and active;
+  if v_tokens is null then raise exception 'bad_pack'; end if;
+  perform token_wallet();
+  perform _tok_credit(v_user, v_tokens, 'purchase', p_pack);
+  return _tok_state(v_user);
+end;
+$$;
+
+revoke all on function public.mock_buy_pack(text, text) from public, anon;
+grant execute on function public.mock_buy_pack(text, text) to authenticated;

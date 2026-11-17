@@ -1,0 +1,235 @@
+/* ============================================================
+   Account pages (Profile, Tokens): shared surface + theme tokens.
+   SiteChrome sets .site[data-gtheme="light|dark"] on these routes;
+   both themes use the same soft (neumorphic) surfaces as game pages.
+   ============================================================ */
+
+.acct {
+  /* fallback: dark glass when no theme attribute is present */
+  --ac-bg: #1b1c22;
+  --ac-raise: 0 24px 50px -32px rgba(0, 0, 0, 0.9);
+  --ac-raise-sm: 0 10px 24px -16px rgba(0, 0, 0, 0.8);
+  --ac-well: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --ac-line: rgba(255, 255, 255, 0.08);
+  --ac-text: #f4f4f6;
+  --ac-muted: rgba(244, 244, 246, 0.64);
+  --ac-faint: rgba(244, 244, 246, 0.42);
+  --ac-accent: #ff8a3d;
+  --ac-good: #4ade80;
+  --ac-bad: #ff8a6b;
+
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(12px, 3vw, 32px) 16px 72px;
+  color: var(--ac-text);
+  display: grid;
+  gap: clamp(16px, 2.4vw, 24px);
+  min-width: 0;
+}
+
+.site[data-gtheme] .acct {
+  --ac-bg: var(--neu-bg);
+  --ac-raise: var(--neu-raise);
+  --ac-raise-sm: var(--neu-raise-sm);
+  --ac-well: var(--neu-well);
+  --ac-accent: var(--neu-accent);
+}
+
+.site[data-gtheme="light"] .acct {
+  --ac-line: rgba(20, 22, 28, 0.08);
+  --ac-text: #16171b;
+  --ac-muted: rgba(22, 23, 27, 0.64);
+  --ac-faint: rgba(22, 23, 27, 0.45);
+  --ac-good: #15803d;
+  --ac-bad: #c2410c;
+}
+
+.acct *,
+.acct *::before,
+.acct *::after {
+  box-sizing: border-box;
+}
+
+.acct h1,
+.acct h2,
+.acct h3,
+.acct p {
+  margin: 0;
+}
+
+.acct a {
+  color: inherit;
+}
+
+/* A raised panel */
+.ac-card {
+  min-width: 0;
+  padding: clamp(18px, 3vw, 28px);
+  border-radius: 24px;
+  background: var(--ac-bg);
+  box-shadow: var(--ac-raise);
+  animation: ac-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.ac-h2 {
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.ac-sub {
+  margin-top: 4px !important;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ac-muted);
+}
+
+.ac-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* Buttons */
+.ac-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--ac-text) !important;
+  background: var(--ac-bg);
+  box-shadow: var(--ac-raise-sm);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ac-btn:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.ac-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: var(--ac-well);
+}
+
+.ac-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ac-btn:focus-visible {
+  outline: 2px solid var(--ac-accent);
+  outline-offset: 3px;
+}
+
+.ac-btn-primary {
+  color: #fff !important;
+  background: linear-gradient(145deg, #ff9d52, #ec5f00);
+  box-shadow: 0 10px 22px -10px rgba(236, 95, 0, 0.75);
+}
+
+.ac-btn-primary:active:not(:disabled) {
+  box-shadow: inset 0 3px 8px rgba(120, 40, 0, 0.45);
+}
+
+.ac-btn-sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+/* Gradient token hero, shared by both pages */
+.ac-coin-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+  background: radial-gradient(120% 140% at 100% 0%, #ffb067 0%, #f46a10 42%, #b93f00 100%);
+  box-shadow: 0 26px 50px -28px rgba(200, 70, 0, 0.85);
+}
+
+.ac-coin-card::before,
+.ac-coin-card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+.ac-coin-card::before {
+  width: 260px;
+  height: 260px;
+  right: -80px;
+  top: -110px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ac-coin-card::after {
+  width: 160px;
+  height: 160px;
+  right: 40px;
+  bottom: -100px;
+}
+
+.ac-coin {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: #8a3300;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #ffc94a 45%, #e59a12 100%);
+  box-shadow:
+    inset 0 -3px 0 rgba(140, 70, 0, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.7),
+    0 8px 18px -6px rgba(90, 30, 0, 0.6);
+}
+
+.ac-coin-card .ac-btn {
+  color: #7a2c00 !important;
+  background: #fff;
+  box-shadow: 0 8px 18px -10px rgba(60, 20, 0, 0.7);
+}
+
+.ac-coin-card .ac-btn-ghost {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+@keyframes ac-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-card {
+    animation: none;
+  }
+}
+
+/* phones: chrome already removes side padding; keep a 16px gutter */
+@media (max-width: 820px) {
+  .acct {
+    padding: 8px 16px 40px;
+  }
+}

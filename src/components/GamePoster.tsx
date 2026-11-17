@@ -15,6 +15,7 @@ import {
   Keyboard,
   Layers,
   Lightbulb,
+  MoveUpRight,
   Music,
   Orbit,
   Palette,
@@ -50,6 +51,7 @@ const byEngine: Record<string, LucideIcon> = {
   dodge: Wind,
   "connect-four": Columns3,
   "lights-out": Lightbulb,
+  arrows: MoveUpRight,
 };
 
 const byId: Record<string, LucideIcon> = {

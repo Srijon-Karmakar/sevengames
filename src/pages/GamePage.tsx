@@ -83,14 +83,22 @@ export default function GamePage() {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
   }, []);
 
-  // Guest notice can be dismissed for the session.
-  const [guestHidden, setGuestHidden] = useState(() => {
-    try {
-      return sessionStorage.getItem("senevon:guest-note") === "1";
-    } catch {
-      return false;
-    }
-  });
+  // After a guest finishes a match: "sign in to save your score". Dismissible for the session.
+  const [nudge, setNudge] = useState(false);
+  const nudgeOff = useRef(
+    (() => {
+      try {
+        return sessionStorage.getItem("senevon:guest-note") === "1";
+      } catch {
+        return false;
+      }
+    })(),
+  );
+  const userRef = useRef(user);
+  userRef.current = user;
+  useEffect(() => {
+    if (user) setNudge(false);
+  }, [user]);
 
   // "F" toggles full screen (ignored while typing or when a game input has focus).
   useEffect(() => {
@@ -129,6 +137,7 @@ export default function GamePage() {
     async (score: number) => {
       if (game) {
         trackGame("game_finish", game.id, score);
+        if (!userRef.current && !nudgeOff.current) setNudge(true);
         // premium: let the result show for a moment, then ask to pay for the next play
         if (premiumRef.current) {
           window.clearTimeout(lockTimer.current);
@@ -166,30 +175,6 @@ export default function GamePage() {
         </div>
       </header>
 
-      {!user && !guestHidden ? (
-        <p className="gp-guest">
-          <Info size={15} aria-hidden="true" />
-          <span>
-            Playing as guest — scores stay on this device.{" "}
-            <Link to={`/login?next=/game/${game.id}`}>Sign in</Link> to join the global leaderboard.
-          </span>
-          <button
-            type="button"
-            className="gp-guest-x"
-            aria-label="Dismiss"
-            onClick={() => {
-              setGuestHidden(true);
-              try {
-                sessionStorage.setItem("senevon:guest-note", "1");
-              } catch {
-                /* ignore */
-              }
-            }}
-          >
-            ×
-          </button>
-        </p>
-      ) : null}
 
       <div className="game-layout">
         {/* Glass frame: toolbar on top, the game edge-to-edge underneath */}
@@ -263,6 +248,32 @@ export default function GamePage() {
           personalBest={best}
         />
       </div>
+
+      {nudge && !user ? (
+        <p className="gp-guest gp-nudge" role="status">
+          <Info size={15} aria-hidden="true" />
+          <span>
+            Nice game! Guest scores stay on this device.{" "}
+            <Link to={`/login?next=/game/${game.id}`}>Sign in</Link> to save it to the global leaderboard.
+          </span>
+          <button
+            type="button"
+            className="gp-guest-x"
+            aria-label="Dismiss"
+            onClick={() => {
+              setNudge(false);
+              nudgeOff.current = true;
+              try {
+                sessionStorage.setItem("senevon:guest-note", "1");
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            ×
+          </button>
+        </p>
+      ) : null}
     </div>
   );
 }

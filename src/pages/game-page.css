@@ -643,3 +643,21 @@
     display: none;
   }
 }
+
+/* Guest nudge after a match: floats at the bottom so the page doesn't shift */
+.site .gp-guest.gp-nudge {
+  position: fixed;
+  inset: auto 16px 20px;
+  z-index: 60;
+  width: fit-content;
+  max-width: calc(100vw - 32px);
+  margin: 0 auto;
+  background: linear-gradient(rgba(244, 96, 0, 0.1), rgba(244, 96, 0, 0.1)), var(--bg-elevated, var(--bg));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 600px) {
+  .site .gp-guest.gp-nudge {
+    border-radius: 18px;
+  }
+}

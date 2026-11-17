@@ -19,8 +19,8 @@ const usedCategories = categories.filter((c) => c === "All" || games.some((g) =>
 
 export default function SiteChrome({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  // Light/dark mode applies to game pages only; other pages keep the dark frame.
-  const isGame = pathname.startsWith("/game/");
+  // Light/dark mode: game pages plus the account pages (profile, tokens); other pages keep the dark frame.
+  const isGame = pathname.startsWith("/game/") || pathname === "/profile" || pathname === "/tokens";
   const { theme, toggle } = useGameTheme();
 
   return (

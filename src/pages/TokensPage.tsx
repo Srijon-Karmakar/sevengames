@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { CalendarClock, Coins, Gift, Gamepad2, KeyRound, Sparkles, Tv, X } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  CalendarClock,
+  Check,
+  Coins,
+  Crown,
+  Gift,
+  Gamepad2,
+  KeyRound,
+  ShoppingBag,
+  Sparkles,
+  Tv,
+  X,
+  Zap,
+} from "lucide-react";
 import { useAuthContext } from "../context/AuthContext";
-import { tokenErrorText, usePlanPrices, useTokens, type LedgerRow } from "../lib/tokens";
+import { tokenErrorText, usePlanPrices, useTokenPacks, useTokens, type LedgerRow, type TokenPack } from "../lib/tokens";
 import { formatMoney, formatTokens, pickCurrency } from "../lib/currency";
 import { getGame } from "../catalog";
 import AdRewardModal from "../components/AdRewardModal";
 import "./tokens.css";
+import "./account.css";
+import "./tokens-page.css";
 
 const REASON: Record<string, { label: string; Icon: typeof Coins }> = {
   signup: { label: "Welcome bonus", Icon: Gift },
@@ -14,26 +29,56 @@ const REASON: Record<string, { label: string; Icon: typeof Coins }> = {
   ad: { label: "Watched an ad", Icon: Tv },
   subscription: { label: "Subscription tokens", Icon: CalendarClock },
   admin: { label: "Adjustment", Icon: Sparkles },
+  guest: { label: "Guest tokens carried over", Icon: Gift },
+  purchase: { label: "Bought a token pack", Icon: ShoppingBag },
 };
+
+const PACK_META: Record<string, { name: string; flag?: string; coins: number }> = {
+  starter: { name: "Starter", coins: 1 },
+  player: { name: "Player", flag: "Most popular", coins: 2 },
+  pro: { name: "Pro", coins: 3 },
+  legend: { name: "Legend", flag: "Best value", coins: 4 },
+};
+
+type Checkout = { kind: "plan"; plan: "monthly" | "yearly" } | { kind: "pack"; pack: TokenPack };
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 
+function CoinStack({ n }: { n: number }) {
+  return (
+    <span className="tw-stack" aria-hidden="true">
+      {Array.from({ length: n }, (_, i) => (
+        <i key={i} style={{ "--i": i } as React.CSSProperties} />
+      ))}
+    </span>
+  );
+}
+
 export default function TokensPage() {
   const { user } = useAuthContext();
-  const { wallet, loading, subscribe, cancel, history, refresh, redeem } = useTokens();
+  const { wallet, guestBalance, loading, subscribe, buyPack, cancel, history, refresh, redeem } = useTokens();
+  const location = useLocation();
   const [code, setCode] = useState("");
   const [codeOpen, setCodeOpen] = useState(false);
   const prices = usePlanPrices();
+  const packs = useTokenPacks();
   const [adOpen, setAdOpen] = useState(false);
-  const [checkout, setCheckout] = useState<"monthly" | "yearly" | null>(null);
+  const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
   const [rows, setRows] = useState<LedgerRow[]>([]);
 
   useEffect(() => {
     document.title = "Tokens — Senevon Game Studio";
   }, []);
+
+  // "/tokens#buy" (from the profile wallet card) scrolls to the packs
+  useEffect(() => {
+    if (location.hash !== "#buy" || !packs) return;
+    const id = requestAnimationFrame(() => document.getElementById("buy")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return () => cancelAnimationFrame(id);
+  }, [location.hash, packs]);
 
   // reload history whenever the balance changes
   const balance = wallet?.balance;
@@ -42,7 +87,10 @@ export default function TokensPage() {
     void history().then(setRows);
   }, [balance, history]);
 
-  const currencies = useMemo(() => [...new Set(prices.map((p) => p.currency))], [prices]);
+  const currencies = useMemo(
+    () => [...new Set([...prices.map((p) => p.currency), ...(packs ?? []).flatMap((p) => Object.keys(p.prices))])],
+    [prices, packs],
+  );
   const currency = pickCurrency(currencies);
   const price = (plan: "monthly" | "yearly") => prices.find((p) => p.currency === currency && p.plan === plan)?.amount;
   const monthly = price("monthly");
@@ -51,112 +99,210 @@ export default function TokensPage() {
   const perMonth = wallet?.sub_tokens ?? 5000;
   const sub = wallet?.subscription ?? null;
   const mock = (wallet?.payments_mode ?? "mock") === "mock";
+  const adsLeft = wallet ? Math.max(0, wallet.ad_daily_cap - wallet.ads_today) : 0;
 
-  async function confirmCheckout() {
-    if (!checkout) return;
+  async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
     setNote(null);
     try {
-      await subscribe(checkout, currency);
-      setNote(`Subscribed! ${formatTokens(perMonth)} tokens have been added.`);
-      setCheckout(null);
+      await action();
+      setNote({ text: success, ok: true });
+      return true;
     } catch (err) {
-      setNote(tokenErrorText(err));
+      setNote({ text: tokenErrorText(err), ok: false });
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function confirmCheckout() {
+    if (!checkout) return;
+    const done =
+      checkout.kind === "plan"
+        ? await run(() => subscribe(checkout.plan, currency), `Subscribed! ${formatTokens(perMonth)} tokens have been added.`)
+        : await run(
+            () => buyPack(checkout.pack.id, currency),
+            `${formatTokens(checkout.pack.tokens + checkout.pack.bonus)} tokens added to your wallet.`,
+          );
+    setCheckout(null);
+    if (done) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function doRedeem(e: React.FormEvent) {
     e.preventDefault();
     if (!code.trim()) return;
-    setBusy(true);
-    setNote(null);
-    try {
-      await redeem(code.trim());
+    const ok = await run(() => redeem(code.trim()), "Code redeemed — you now have unlimited tokens.");
+    if (ok) {
       setCode("");
       setCodeOpen(false);
-      setNote("Code redeemed — you now have unlimited tokens.");
-    } catch (err) {
-      setNote(tokenErrorText(err));
-    } finally {
-      setBusy(false);
     }
   }
 
-  async function doCancel() {
-    setBusy(true);
-    setNote(null);
-    try {
-      await cancel();
-      setNote("Subscription cancelled. It won't renew; tokens you've paid for still arrive until the period ends.");
-    } catch (err) {
-      setNote(tokenErrorText(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  /* ---------- guests ---------- */
   if (!user) {
     return (
-      <div className="page narrow tk-page">
-        <section className="tk-hero card">
-          <span className="tk-hero-coin" aria-hidden="true">
-            <Coins size={34} />
-          </span>
-          <h1>Tokens</h1>
-          <p>Premium games cost tokens per play. Sign up and get 1,000 free tokens to start.</p>
-          <Link className="tk-btn tk-btn-primary" to="/login?next=/tokens">
-            Sign in or create an account
-          </Link>
+      <div className="acct tw">
+        <section className="ac-card ac-coin-card tw-hero">
+          <div className="tw-hero-main">
+            <span className="ac-coin tw-hero-coin" aria-hidden="true">
+              <Coins size={30} />
+            </span>
+            <div>
+              <span className="tw-hero-label">Guest tokens</span>
+              <strong className="tw-balance">{guestBalance === null ? "…" : formatTokens(guestBalance)}</strong>
+              <p className="tw-hero-sub">
+                Premium games cost tokens per play. Sign in to get 1,000 free tokens, buy packs and earn more by
+                watching ads. Your unspent guest tokens come with you.
+              </p>
+            </div>
+          </div>
+          <div className="tw-hero-actions">
+            <Link className="ac-btn" to="/login?next=/tokens">
+              Sign in or create an account
+            </Link>
+          </div>
         </section>
       </div>
     );
   }
 
   return (
-    <div className="page narrow tk-page">
-      <section className="tk-hero card">
-        <span className="tk-hero-coin" aria-hidden="true">
-          <Coins size={34} />
-        </span>
-        <p className="tk-hero-label">Your balance</p>
-        <h1 className="tk-balance">
-          {wallet ? (wallet.unlimited ? "∞" : formatTokens(wallet.balance)) : loading ? "…" : "—"}
-        </h1>
-        {wallet?.unlimited ? (
-          <span className="tk-unlimited">
-            <KeyRound size={14} aria-hidden="true" /> Unlimited — premium games are free for you
+    <div className="acct tw">
+      {/* ---------- balance ---------- */}
+      <section className="ac-card ac-coin-card tw-hero">
+        <div className="tw-hero-main">
+          <span className="ac-coin tw-hero-coin" aria-hidden="true">
+            <Coins size={30} />
           </span>
-        ) : (
-          <p className="tk-hero-sub">Free games are always free. Premium games use tokens per play.</p>
-        )}
-        {!wallet && !loading ? (
-          <button type="button" className="tk-btn" onClick={() => void refresh()}>
-            Retry
+          <div>
+            <span className="tw-hero-label">Your balance</span>
+            <strong className="tw-balance">
+              {wallet ? (wallet.unlimited ? "∞" : formatTokens(wallet.balance)) : loading ? "…" : "—"}
+            </strong>
+            {wallet?.unlimited ? (
+              <span className="tw-pill">
+                <KeyRound size={14} aria-hidden="true" /> Unlimited: premium games are free for you
+              </span>
+            ) : (
+              <p className="tw-hero-sub">Free games are always free. Premium games use tokens per play. Tokens never expire.</p>
+            )}
+          </div>
+        </div>
+        <div className="tw-hero-actions">
+          {wallet && !wallet.unlimited ? (
+            <a className="ac-btn" href="#buy">
+              <ShoppingBag size={16} aria-hidden="true" /> Buy tokens
+            </a>
+          ) : null}
+          <button
+            type="button"
+            className="ac-btn ac-btn-ghost"
+            disabled={!wallet || adsLeft === 0}
+            onClick={() => setAdOpen(true)}
+          >
+            <Tv size={16} aria-hidden="true" /> Watch ad · +{wallet?.ad_reward ?? 50}
           </button>
-        ) : null}
+          {!wallet && !loading ? (
+            <button type="button" className="ac-btn ac-btn-ghost" onClick={() => void refresh()}>
+              Retry
+            </button>
+          ) : null}
+        </div>
       </section>
 
       {note ? (
-        <p className="tk-note" role="status">
-          {note}
+        <p className={`tw-note${note.ok ? " ok" : " bad"}`} role="status">
+          {note.ok ? <Check size={16} aria-hidden="true" /> : null}
+          {note.text}
         </p>
       ) : null}
 
-      {/* ---------- Subscription ---------- */}
-      <section className="tk-section">
-        <h2>Subscribe</h2>
-        {sub ? (
-          <div className="tk-sub card">
+      {/* ---------- buy packs ---------- */}
+      {!wallet?.unlimited ? (
+        <section className="tw-section" id="buy">
+          <div className="ac-section-head">
             <div>
-              <b>{sub.plan === "monthly" ? "Monthly" : "Yearly"} plan</b>
-              <span className={`tk-status ${sub.status}`}>{sub.status === "active" ? "Active" : "Cancelled"}</span>
+              <h2 className="ac-h2">Buy tokens</h2>
+              <p className="ac-sub">One-off packs. Bigger packs include bonus tokens.</p>
+            </div>
+            {mock ? <span className="tw-test">Test mode · no real payment</span> : null}
+          </div>
+          {packs === null ? (
+            <div className="tw-packs">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="ac-card tw-pack is-skeleton" />
+              ))}
+            </div>
+          ) : packs.length === 0 ? (
+            <p className="ac-sub">Token packs aren't available right now.</p>
+          ) : (
+            <div className="tw-packs">
+              {packs.map((p, i) => {
+                const meta = PACK_META[p.id] ?? { name: p.id, coins: Math.min(4, i + 1) };
+                const amount = p.prices[currency] ?? p.prices.USD;
+                const cur = p.prices[currency] !== undefined ? currency : "USD";
+                return (
+                  <article
+                    key={p.id}
+                    className={`ac-card tw-pack${meta.flag ? " is-flagged" : ""}`}
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    {meta.flag ? <span className="tw-flag">{meta.flag}</span> : null}
+                    <CoinStack n={meta.coins} />
+                    <h3 className="tw-pack-name">{meta.name}</h3>
+                    <p className="tw-pack-tokens">
+                      {formatTokens(p.tokens + p.bonus)}
+                      <small>tokens</small>
+                    </p>
+                    <p className="tw-pack-bonus">
+                      {p.bonus > 0 ? (
+                        <>
+                          <Zap size={13} aria-hidden="true" /> {formatTokens(p.tokens)} + {formatTokens(p.bonus)} bonus
+                        </>
+                      ) : (
+                        "No bonus"
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      className={`ac-btn${meta.flag ? " ac-btn-primary" : ""} tw-pack-buy`}
+                      disabled={amount === undefined || busy}
+                      onClick={() => setCheckout({ kind: "pack", pack: p })}
+                    >
+                      {amount !== undefined ? formatMoney(amount, cur) : "—"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {/* ---------- subscription ---------- */}
+      <section className="tw-section">
+        <div className="ac-section-head">
+          <div>
+            <h2 className="ac-h2">Subscribe</h2>
+            <p className="ac-sub">The best value: {formatTokens(perMonth)} tokens every month. Cancel any time.</p>
+          </div>
+        </div>
+        {sub ? (
+          <div className="ac-card tw-sub">
+            <span className="tw-icon" aria-hidden="true">
+              <Crown size={20} />
+            </span>
+            <div className="tw-sub-text">
               <p>
+                <b>{sub.plan === "monthly" ? "Monthly" : "Yearly"} plan</b>
+                <span className={`tw-status ${sub.status}`}>{sub.status === "active" ? "Active" : "Cancelled"}</span>
+              </p>
+              <p className="ac-sub">
                 {formatTokens(perMonth)} tokens every month · {formatMoney(Number(sub.amount), sub.currency)}/
                 {sub.plan === "monthly" ? "month" : "year"}
               </p>
-              <p className="tk-muted">
+              <p className="ac-sub">
                 {sub.status === "active"
                   ? `Next ${formatTokens(perMonth)} tokens on ${fmtDate(sub.next_credit_at)} · renews ${fmtDate(sub.period_end)}`
                   : new Date(sub.next_credit_at) < new Date(sub.period_end)
@@ -165,115 +311,142 @@ export default function TokensPage() {
               </p>
             </div>
             {sub.status === "active" ? (
-              <button type="button" className="tk-btn" disabled={busy} onClick={() => void doCancel()}>
+              <button
+                type="button"
+                className="ac-btn ac-btn-sm"
+                disabled={busy}
+                onClick={() =>
+                  void run(cancel, "Subscription cancelled. It won't renew; tokens you've paid for still arrive until the period ends.")
+                }
+              >
                 Cancel
               </button>
             ) : null}
           </div>
         ) : (
-          <div className="tk-plans">
-            <article className="tk-plan card">
-              <h3>Monthly</h3>
-              <p className="tk-price">
-                {monthly !== undefined ? formatMoney(monthly, currency) : "…"}
-                <small>/month</small>
-              </p>
-              <p className="tk-plan-tokens">
-                <Coins size={15} aria-hidden="true" /> {formatTokens(perMonth)} tokens every month
-              </p>
-              <button type="button" className="tk-btn tk-btn-primary" disabled={monthly === undefined} onClick={() => setCheckout("monthly")}>
-                Subscribe monthly
-              </button>
-            </article>
-            <article className="tk-plan card is-best">
-              {savePct > 0 ? <span className="tk-plan-flag">Save {savePct}%</span> : null}
-              <h3>Yearly</h3>
-              <p className="tk-price">
-                {yearly !== undefined ? formatMoney(yearly, currency) : "…"}
-                <small>/year</small>
-              </p>
-              <p className="tk-plan-tokens">
-                <Coins size={15} aria-hidden="true" /> {formatTokens(perMonth)} tokens every month, all year
-              </p>
-              <button type="button" className="tk-btn tk-btn-primary" disabled={yearly === undefined} onClick={() => setCheckout("yearly")}>
-                Subscribe yearly
-              </button>
-            </article>
+          <div className="tw-plans">
+            {(["monthly", "yearly"] as const).map((plan) => {
+              const amount = plan === "monthly" ? monthly : yearly;
+              const best = plan === "yearly";
+              return (
+                <article key={plan} className={`ac-card tw-plan${best ? " is-flagged" : ""}`}>
+                  {best && savePct > 0 ? <span className="tw-flag">Save {savePct}%</span> : null}
+                  <span className="tw-icon" aria-hidden="true">
+                    {best ? <Crown size={20} /> : <CalendarClock size={20} />}
+                  </span>
+                  <h3 className="tw-pack-name">{best ? "Yearly" : "Monthly"}</h3>
+                  <p className="tw-price">
+                    {amount !== undefined ? formatMoney(amount, currency) : "…"}
+                    <small>/{best ? "year" : "month"}</small>
+                  </p>
+                  <ul className="tw-perks">
+                    <li>
+                      <Check size={14} aria-hidden="true" /> {formatTokens(perMonth)} tokens every month
+                    </li>
+                    <li>
+                      <Check size={14} aria-hidden="true" /> First {formatTokens(perMonth)} straight away
+                    </li>
+                    <li>
+                      <Check size={14} aria-hidden="true" /> {best ? "Billed once a year" : "Cancel any time"}
+                    </li>
+                  </ul>
+                  <button
+                    type="button"
+                    className={`ac-btn${best ? " ac-btn-primary" : ""}`}
+                    disabled={amount === undefined}
+                    onClick={() => setCheckout({ kind: "plan", plan })}
+                  >
+                    Subscribe {plan}
+                  </button>
+                </article>
+              );
+            })}
           </div>
         )}
-        <p className="tk-muted tk-small">Prices shown in {currency}. Unused tokens never expire.</p>
+        <p className="tw-fine">Prices shown in {currency}. Unused tokens never expire.</p>
       </section>
 
-      {/* ---------- Earn ---------- */}
-      <section className="tk-section">
-        <h2>Earn free tokens</h2>
-        <div className="tk-earn card">
-          <span className="tk-earn-icon" aria-hidden="true">
-            <Tv size={22} />
+      {/* ---------- earn + code ---------- */}
+      <div className="tw-row">
+        <section className="ac-card tw-earn">
+          <span className="tw-icon" aria-hidden="true">
+            <Tv size={20} />
           </span>
-          <div>
+          <div className="tw-earn-text">
             <b>Watch an ad · +{wallet?.ad_reward ?? 50} tokens</b>
-            <p className="tk-muted">
-              {wallet ? `${wallet.ads_today} of ${wallet.ad_daily_cap} watched today` : "Up to 10 a day"}
-            </p>
+            <p className="ac-sub">{wallet ? `${wallet.ads_today} of ${wallet.ad_daily_cap} watched today` : "Up to 10 a day"}</p>
+            {wallet ? (
+              <span className="tw-meter" aria-hidden="true">
+                <i style={{ width: `${Math.min(100, (wallet.ads_today / Math.max(1, wallet.ad_daily_cap)) * 100)}%` }} />
+              </span>
+            ) : null}
           </div>
-          <button
-            type="button"
-            className="tk-btn tk-btn-primary"
-            disabled={!wallet || wallet.ads_today >= wallet.ad_daily_cap}
-            onClick={() => setAdOpen(true)}
-          >
+          <button type="button" className="ac-btn ac-btn-sm ac-btn-primary" disabled={!wallet || adsLeft === 0} onClick={() => setAdOpen(true)}>
             Watch
           </button>
-        </div>
-      </section>
-
-      {/* ---------- Redeem code (developers / admins) ---------- */}
-      {wallet && !wallet.unlimited ? (
-        <section className="tk-section">
-          {codeOpen ? (
-            <form className="tk-redeem card" onSubmit={(e) => void doRedeem(e)}>
-              <KeyRound size={18} aria-hidden="true" />
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="Enter redeem code"
-                aria-label="Redeem code"
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                maxLength={64}
-                autoFocus
-              />
-              <button type="submit" className="tk-btn tk-btn-primary" disabled={busy || !code.trim()}>
-                Redeem
-              </button>
-            </form>
-          ) : (
-            <button type="button" className="tk-link" onClick={() => setCodeOpen(true)}>
-              Have a code?
-            </button>
-          )}
         </section>
-      ) : null}
 
-      {/* ---------- History ---------- */}
-      <section className="tk-section">
-        <h2>History</h2>
+        {wallet && !wallet.unlimited ? (
+          <section className="ac-card tw-code">
+            {codeOpen ? (
+              <form className="tw-redeem" onSubmit={(e) => void doRedeem(e)}>
+                <KeyRound size={18} aria-hidden="true" />
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="Enter redeem code"
+                  aria-label="Redeem code"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  maxLength={64}
+                  autoFocus
+                />
+                <button type="submit" className="ac-btn ac-btn-sm ac-btn-primary" disabled={busy || !code.trim()}>
+                  Redeem
+                </button>
+              </form>
+            ) : (
+              <>
+                <span className="tw-icon" aria-hidden="true">
+                  <KeyRound size={20} />
+                </span>
+                <div className="tw-earn-text">
+                  <b>Have a code?</b>
+                  <p className="ac-sub">Redeem it for your account.</p>
+                </div>
+                <button type="button" className="ac-btn ac-btn-sm" onClick={() => setCodeOpen(true)}>
+                  Enter code
+                </button>
+              </>
+            )}
+          </section>
+        ) : null}
+      </div>
+
+      {/* ---------- history ---------- */}
+      <section className="ac-card tw-history-card">
+        <div className="ac-section-head">
+          <h2 className="ac-h2">History</h2>
+        </div>
         {rows.length ? (
-          <ul className="tk-history card">
+          <ul className="tw-history">
             {rows.map((r) => {
               const meta = REASON[r.reason] ?? REASON.admin;
               const detail =
-                r.reason === "play" && r.ref ? (getGame(r.ref)?.title ?? r.ref) : r.reason === "admin" && r.ref ? r.ref : null;
+                (r.reason === "play" && r.ref ? (getGame(r.ref)?.title ?? r.ref) : null) ??
+                (r.reason === "purchase" && r.ref ? (PACK_META[r.ref]?.name ?? r.ref) + " pack" : null) ??
+                (r.reason === "admin" && r.ref ? r.ref : null);
               return (
                 <li key={r.id}>
-                  <meta.Icon size={16} aria-hidden="true" />
-                  <span className="tk-h-what">
-                    {meta.label}
-                    {detail ? <small> · {detail}</small> : null}
+                  <span className={`tw-h-icon${r.delta >= 0 ? " plus" : ""}`} aria-hidden="true">
+                    <meta.Icon size={15} />
                   </span>
-                  <span className="tk-h-when">{fmtDate(r.created_at)}</span>
+                  <span className="tw-h-what">
+                    {meta.label}
+                    {detail ? <small>{detail}</small> : null}
+                  </span>
+                  <span className="tw-h-when">{fmtDate(r.created_at)}</span>
                   <b className={r.delta >= 0 ? "plus" : "minus"}>
                     {r.delta >= 0 ? "+" : "−"}
                     {formatTokens(Math.abs(r.delta))}
@@ -283,28 +456,48 @@ export default function TokensPage() {
             })}
           </ul>
         ) : (
-          <p className="tk-muted">No activity yet.</p>
+          <p className="ac-sub">No activity yet.</p>
         )}
       </section>
 
-      {/* ---------- Test checkout ---------- */}
+      {/* ---------- test checkout ---------- */}
       {checkout ? (
-        <div className="tk-modal" role="dialog" aria-modal="true" aria-label="Checkout">
+        <div className="tk-modal" role="dialog" aria-modal="true" aria-label="Checkout" onClick={(e) => e.target === e.currentTarget && setCheckout(null)}>
           <div className="tk-modal-card">
             <button type="button" className="tk-modal-x" onClick={() => setCheckout(null)} aria-label="Close">
               <X size={18} />
             </button>
             <div className="tk-modal-center">
               {mock ? <span className="tk-test-tag">Test checkout · no real payment</span> : null}
-              <h3>{checkout === "monthly" ? "Monthly" : "Yearly"} plan</h3>
-              <p className="tk-price">
-                {formatMoney((checkout === "monthly" ? monthly : yearly) ?? 0, currency)}
-                <small>/{checkout === "monthly" ? "month" : "year"}</small>
-              </p>
-              <p>
-                {formatTokens(perMonth)} tokens now, then {formatTokens(perMonth)} every month
-                {checkout === "yearly" ? " for the year" : ""}. Cancel any time.
-              </p>
+              {checkout.kind === "plan" ? (
+                <>
+                  <h3>{checkout.plan === "monthly" ? "Monthly" : "Yearly"} plan</h3>
+                  <p className="tk-price">
+                    {formatMoney((checkout.plan === "monthly" ? monthly : yearly) ?? 0, currency)}
+                    <small>/{checkout.plan === "monthly" ? "month" : "year"}</small>
+                  </p>
+                  <p>
+                    {formatTokens(perMonth)} tokens now, then {formatTokens(perMonth)} every month
+                    {checkout.plan === "yearly" ? " for the year" : ""}. Cancel any time.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <CoinStack n={PACK_META[checkout.pack.id]?.coins ?? 2} />
+                  <h3>{PACK_META[checkout.pack.id]?.name ?? checkout.pack.id} pack</h3>
+                  <p className="tk-price">
+                    {formatMoney(
+                      checkout.pack.prices[currency] ?? checkout.pack.prices.USD ?? 0,
+                      checkout.pack.prices[currency] !== undefined ? currency : "USD",
+                    )}
+                  </p>
+                  <p>
+                    {formatTokens(checkout.pack.tokens + checkout.pack.bonus)} tokens
+                    {checkout.pack.bonus > 0 ? ` (includes ${formatTokens(checkout.pack.bonus)} bonus)` : ""}, added to your wallet
+                    right away. One-off payment.
+                  </p>
+                </>
+              )}
               {mock ? (
                 <button type="button" className="tk-btn tk-btn-primary" disabled={busy} onClick={() => void confirmCheckout()}>
                   {busy ? "Processing…" : "Confirm test purchase"}

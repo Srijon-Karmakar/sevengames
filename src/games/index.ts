@@ -19,6 +19,7 @@ import StackGame from "./stack";
 import DodgeGame from "./dodge";
 import ConnectFour from "./connect-four";
 import LightsOut from "./lights-out";
+import ArrowsGame from "./arrows";
 
 export type GameProps = {
   /** Call once when the round ends with the final score (or time in seconds for timed games). */
@@ -46,6 +47,7 @@ export const engines: Record<GameEngine, (props: GameProps) => React.JSX.Element
   dodge: DodgeGame,
   "connect-four": ConnectFour,
   "lights-out": LightsOut,
+  arrows: ArrowsGame,
 };
 
 export function shuffle<T>(items: T[]): T[] {
