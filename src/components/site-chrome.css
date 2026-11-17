@@ -285,3 +285,340 @@
   opacity: 0.7;
   margin-bottom: 22px;
 }
+
+/* Landing nav: white pill buttons (token balance, "Play now") beside the avatar */
+.h3-nav .h3-nav-end.h3-nav-pills {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.h3 .h3-nav .h3-pill-btn,
+.h3 .h3-nav .tk-pill.tk-pill-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+  white-space: nowrap;
+  color: #17181c;
+  background: #f4f4f6;
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.45);
+  opacity: 1;
+  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.h3 .h3-nav .tk-pill.tk-pill-solid {
+  padding: 0 14px 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.h3 .h3-nav .tk-pill.tk-pill-solid svg {
+  color: #e25a00;
+}
+
+.h3 .h3-nav .h3-pill-btn:hover,
+.h3 .h3-nav .tk-pill.tk-pill-solid:hover {
+  background: #fff;
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.55);
+  opacity: 1;
+}
+
+.h3 .h3-nav .h3-pill-btn:active,
+.h3 .h3-nav .tk-pill.tk-pill-solid:active {
+  transform: scale(0.96);
+}
+
+.h3 .h3-nav .h3-pill-btn:focus-visible,
+.h3 .h3-nav .tk-pill.tk-pill-solid:focus-visible {
+  outline: 2px solid #ff8a3d;
+  outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .h3-nav .h3-nav-end.h3-nav-pills {
+    gap: 6px;
+  }
+
+  .h3 .h3-nav .h3-pill-btn,
+  .h3 .h3-nav .tk-pill.tk-pill-solid {
+    height: 34px;
+    padding: 0 12px;
+    font-size: 12.5px;
+  }
+}
+
+/* ---------- Landing pills: motion ---------- */
+@keyframes h3-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.92);
+  }
+}
+
+@keyframes h3-shine {
+  from {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  to {
+    transform: translateX(220%) skewX(-20deg);
+  }
+}
+
+@keyframes h3-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 138, 61, 0.55), 0 6px 18px -8px rgba(0, 0, 0, 0.45);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 10px rgba(255, 138, 61, 0), 0 6px 18px -8px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* staggered entrance */
+.h3-nav .h3-nav-pills > * {
+  animation: h3-pill-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.h3-nav .h3-nav-pills > :nth-child(1) { animation-delay: 0.15s; }
+.h3-nav .h3-nav-pills > :nth-child(2) { animation-delay: 0.25s; }
+.h3-nav .h3-nav-pills > :nth-child(3) { animation-delay: 0.35s; }
+
+/* shared: lift + springy press */
+.h3 .h3-nav .h3-pill-btn,
+.h3 .h3-nav .tk-pill.tk-pill-solid {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.3s ease;
+}
+
+@media (hover: hover) {
+  .h3 .h3-nav .h3-pill-btn:hover,
+  .h3 .h3-nav .tk-pill.tk-pill-solid:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px -10px rgba(0, 0, 0, 0.6);
+  }
+}
+
+.h3 .h3-nav .h3-pill-btn:active,
+.h3 .h3-nav .tk-pill.tk-pill-solid:active {
+  transform: translateY(0) scale(0.95);
+  transition-duration: 0.08s;
+}
+
+/* Play now: orange fill wipes in, icon spins up, shine sweeps across, soft pulse ring */
+.h3 .h3-nav .h3-play-btn {
+  padding: 0 18px 0 6px;
+  gap: 8px;
+  animation:
+    h3-pill-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.25s backwards,
+    h3-ring 2.6s ease-out 1.6s infinite;
+}
+
+.h3 .h3-nav .h3-play-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #ff9d52, #ec5f00);
+  clip-path: circle(0% at 19px 50%);
+  transition: clip-path 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.h3 .h3-nav .h3-play-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+  pointer-events: none;
+}
+
+.h3-play-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, #ff9d52, #ec5f00);
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s ease, color 0.25s ease;
+}
+
+.h3-play-icon svg {
+  margin-left: 2px;
+}
+
+.h3-play-label {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (hover: hover) {
+  .h3 .h3-nav .h3-play-btn:hover {
+    color: #fff;
+    animation-play-state: paused;
+  }
+
+  .h3 .h3-nav .h3-play-btn:hover::before {
+    clip-path: circle(150% at 19px 50%);
+  }
+
+  .h3 .h3-nav .h3-play-btn:hover::after {
+    animation: h3-shine 0.7s ease 0.15s;
+  }
+
+  .h3 .h3-nav .h3-play-btn:hover .h3-play-icon {
+    color: #ec5f00;
+    background: #fff;
+    transform: rotate(360deg) scale(1.08);
+  }
+
+  .h3 .h3-nav .h3-play-btn:hover .h3-play-label {
+    transform: translateX(2px);
+  }
+}
+
+.h3 .h3-nav .h3-play-btn:focus-visible::before {
+  clip-path: circle(150% at 19px 50%);
+}
+
+.h3 .h3-nav .h3-play-btn:focus-visible {
+  color: #fff;
+}
+
+/* Token pill: coin flips on hover, number bumps when the balance changes, +N floats up */
+.tk-pill-coin {
+  display: grid;
+  place-items: center;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin {
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+  border-radius: 50%;
+  color: #8a3300;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #ffc94a 45%, #e59a12 100%);
+  box-shadow: inset 0 -2px 0 rgba(140, 70, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin svg {
+  width: 13px;
+  height: 13px;
+  color: #8a3300;
+}
+
+@media (hover: hover) {
+  .tk-pill:hover .tk-pill-coin {
+    transform: rotateY(360deg) scale(1.1);
+  }
+
+  .h3 .h3-nav .tk-pill.tk-pill-solid:hover {
+    background: #fff7f0;
+  }
+}
+
+.tk-pill b {
+  display: inline-block;
+  min-width: 2ch;
+  transition: color 0.3s ease;
+}
+
+.tk-pill.is-up b {
+  animation: tk-bump 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: #16a34a;
+}
+
+.tk-pill.is-down b {
+  animation: tk-bump 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tk-pill.is-up .tk-pill-coin,
+.tk-pill.is-down .tk-pill-coin {
+  animation: tk-coin-flip 0.7s ease;
+}
+
+.tk-pill {
+  position: relative;
+  overflow: visible;
+}
+
+.tk-pill-delta {
+  position: absolute;
+  right: 6px;
+  top: -4px;
+  font-size: 11.5px;
+  font-weight: 800;
+  pointer-events: none;
+  color: #ff8a3d;
+  animation: tk-float 1.5s ease-out forwards;
+}
+
+.tk-pill.is-up .tk-pill-delta {
+  color: #22c55e;
+}
+
+/* the solid pill clips its shine, so float the delta chip below it instead */
+.h3 .h3-nav .tk-pill.tk-pill-solid {
+  overflow: visible;
+}
+
+@keyframes tk-bump {
+  40% {
+    transform: scale(1.22);
+  }
+}
+
+@keyframes tk-coin-flip {
+  to {
+    transform: rotateY(720deg);
+  }
+}
+
+@keyframes tk-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .h3-nav .h3-nav-pills > *,
+  .h3 .h3-nav .h3-play-btn,
+  .h3 .h3-nav .h3-play-btn:hover::after,
+  .tk-pill.is-up b,
+  .tk-pill.is-down b,
+  .tk-pill.is-up .tk-pill-coin,
+  .tk-pill.is-down .tk-pill-coin {
+    animation: none;
+  }
+
+  .tk-pill:hover .tk-pill-coin,
+  .h3 .h3-nav .h3-play-btn:hover .h3-play-icon {
+    transform: none;
+  }
+}

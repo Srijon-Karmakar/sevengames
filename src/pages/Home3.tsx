@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { House, Trophy } from "lucide-react";
+import { House, Play, Trophy } from "lucide-react";
 import { categories, games, scoreLabel, type Game, type GameCategory } from "../catalog";
 import { categoryIcon } from "../lib/categoryIcons";
 import { useBestForGame } from "../hooks/useBest";
@@ -260,12 +260,15 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
           ) : null}
         </Link>
         {videoHero ? (
-          // /home3: just "All games" (opens the game globe), on the right beside the account button
-          <div className="h3-nav-end">
-            <div className="h3-menu h3-menu-end">
-              <Link to="/games">All games</Link>
-            </div>
-            <TokenPill />
+          // landing: white pill buttons (tokens, "Play now" → game globe) beside the account button
+          <div className="h3-nav-end h3-nav-pills">
+            <TokenPill variant="solid" />
+            <Link className="h3-pill-btn h3-play-btn" to="/games">
+              <span className="h3-play-icon" aria-hidden="true">
+                <Play size={12} fill="currentColor" strokeWidth={0} />
+              </span>
+              <span className="h3-play-label">Play now</span>
+            </Link>
             <NavAccount />
           </div>
         ) : (
