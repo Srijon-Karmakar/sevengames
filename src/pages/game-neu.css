@@ -783,3 +783,111 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   Tokens on game pages: nav pill, price chip, premium play gate
+   ============================================================ */
+.site[data-gtheme] .tk-pill {
+  border: 0;
+  color: var(--text, inherit);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-raise-sm);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: box-shadow 0.22s var(--neu-ease), transform 0.45s var(--neu-spring);
+}
+
+.site[data-gtheme="light"] .tk-pill {
+  color: #1d1e22;
+}
+
+.site[data-gtheme="dark"] .tk-pill {
+  color: #f1f1f3;
+}
+
+.site[data-gtheme] .tk-pill svg {
+  color: var(--neu-accent);
+}
+
+@media (hover: hover) {
+  .site[data-gtheme] .tk-pill:hover {
+    background: var(--neu-bg);
+    box-shadow: var(--neu-half);
+    transform: translateY(1px) scale(0.985);
+    transition-duration: 0.14s;
+  }
+}
+
+.site[data-gtheme] .tk-pill:active {
+  box-shadow: var(--neu-press);
+  transform: translateY(2px) scale(0.96);
+  transition-duration: 0.07s;
+}
+
+.site[data-gtheme] .gp-chips .gp-chip-cost {
+  color: var(--neu-accent);
+  font-weight: 800;
+}
+
+/* the gate sits inside the game screen: same soft surface as the in-game menus */
+.site[data-gtheme] .gp-stage .tk-gate-card {
+  border: 0;
+  color: var(--text);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-raise);
+}
+
+.site[data-gtheme] .gp-stage .tk-gate-card p {
+  color: var(--text-secondary);
+}
+
+.site[data-gtheme] .gp-stage .tk-gate-balance b {
+  color: var(--text);
+}
+
+.site[data-gtheme] .gp-stage .tk-gate-badge {
+  color: var(--neu-accent);
+  background: var(--neu-bg);
+  box-shadow: var(--neu-well-sm);
+}
+
+.site.site[data-gtheme="light"] .gp-stage .tk-gate.is-again {
+  background: rgba(227, 229, 234, 0.72);
+}
+
+.site[data-gtheme] .gp-stage .tk-btn {
+  border: 0;
+  background: var(--neu-bg);
+  box-shadow: var(--neu-raise-sm);
+  transition: box-shadow 0.22s var(--neu-ease), transform 0.45s var(--neu-spring);
+}
+
+.site[data-gtheme] .gp-stage .tk-btn-primary {
+  color: #1f0c00;
+  background: var(--neu-orange);
+  box-shadow: var(--neu-orange-raise);
+}
+
+@media (hover: hover) {
+  .site[data-gtheme] .gp-stage .tk-btn:hover:not(:disabled) {
+    background: var(--neu-bg);
+    box-shadow: var(--neu-half);
+    transform: translateY(1px) scale(0.985);
+    transition-duration: 0.14s;
+  }
+
+  .site[data-gtheme] .gp-stage .tk-btn-primary:hover:not(:disabled) {
+    background: var(--neu-orange);
+    box-shadow: var(--neu-orange-half);
+  }
+}
+
+.site[data-gtheme] .gp-stage .tk-btn:active:not(:disabled) {
+  box-shadow: var(--neu-press);
+  transform: translateY(2px) scale(0.96);
+  transition-duration: 0.07s;
+}
+
+.site[data-gtheme] .gp-stage .tk-btn-primary:active:not(:disabled) {
+  box-shadow: var(--neu-orange-press);
+}

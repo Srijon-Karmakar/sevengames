@@ -307,6 +307,20 @@ async function cloudinarySignature() {
   return { cloud_name: cloud, api_key: key, timestamp, folder, signature };
 }
 
+/* ---------- tokens ---------- */
+
+async function userIdByEmail(email: string): Promise<string | null> {
+  // paged; fine for small/medium user counts
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await db.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const hit = data.users.find((u) => (u.email ?? "").toLowerCase() === email);
+    if (hit) return hit.id;
+    if (data.users.length < 200) break;
+  }
+  return null;
+}
+
 /* ---------- router ---------- */
 
 Deno.serve(async (req) => {
@@ -440,6 +454,94 @@ Deno.serve(async (req) => {
           if (error) throw error;
         }
         return json({ ok: true });
+      }
+
+      /* ---- Tokens: prices, plans, payments mode, grants ---- */
+      case "tokens_config": {
+        const [games, plans, mode] = await Promise.all([
+          db.from("game_prices").select("game_id, cost"),
+          db.from("plan_prices").select("currency, plan, amount").order("currency"),
+          db.from("site_settings").select("value").eq("key", "payments_mode").maybeSingle(),
+        ]);
+        if (games.error) throw games.error;
+        if (plans.error) throw plans.error;
+        return json({
+          game_prices: games.data ?? [],
+          plan_prices: plans.data ?? [],
+          payments_mode: (mode.data?.value as string | undefined) ?? "mock",
+        });
+      }
+
+      case "game_price_set": {
+        const gameId = text(body.game_id, 80);
+        const cost = Math.max(0, Math.min(1_000_000, Math.round(Number(body.cost) || 0)));
+        if (!gameId) return json({ error: "Missing game" }, 400);
+        const { error } = await db.from("game_prices").upsert({ game_id: gameId, cost, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      case "plan_price_set": {
+        const currency = text(body.currency, 3).toUpperCase();
+        const plan = body.plan === "yearly" ? "yearly" : "monthly";
+        const amount = Math.round(Number(body.amount) * 100) / 100;
+        if (!/^[A-Z]{3}$/.test(currency)) return json({ error: "Currency must be a 3-letter code like INR" }, 400);
+        if (!(amount > 0)) return json({ error: "Price must be above 0" }, 400);
+        const { error } = await db.from("plan_prices").upsert({ currency, plan, amount });
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      case "plan_price_delete": {
+        const currency = text(body.currency, 3).toUpperCase();
+        if (currency === "USD") return json({ error: "USD is the fallback currency and can't be removed" }, 400);
+        const { error } = await db.from("plan_prices").delete().eq("currency", currency);
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      case "payments_mode_set": {
+        const mode = body.mode === "live" ? "live" : "mock";
+        const { error } = await db
+          .from("site_settings")
+          .upsert({ key: "payments_mode", value: mode, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        return json({ ok: true, mode });
+      }
+
+      case "tokens_lookup": {
+        const email = text(body.email, 200).toLowerCase();
+        const userId = email.includes("@") ? await userIdByEmail(email) : null;
+        if (!userId) return json({ error: "No account with that email" }, 404);
+        const [wallet, sub] = await Promise.all([
+          db.from("token_wallets").select("balance").eq("user_id", userId).maybeSingle(),
+          db
+            .from("subscriptions")
+            .select("plan, status, currency, amount, period_end, next_credit_at")
+            .eq("user_id", userId)
+            .in("status", ["active", "cancelled"])
+            .maybeSingle(),
+        ]);
+        return json({ balance: wallet.data?.balance ?? 0, subscription: sub.data ?? null });
+      }
+
+      case "tokens_grant": {
+        const email = text(body.email, 200).toLowerCase();
+        const amount = Math.round(Number(body.amount) || 0);
+        if (!email.includes("@")) return json({ error: "Enter the player's account email" }, 400);
+        if (!amount || Math.abs(amount) > 1_000_000) return json({ error: "Enter an amount (negative to deduct)" }, 400);
+        const userId = await userIdByEmail(email);
+        if (!userId) return json({ error: "No account with that email" }, 404);
+        const { data, error } = await db.rpc("admin_grant_tokens", {
+          p_user: userId,
+          p_amount: amount,
+          p_note: text(body.note, 200) || "Admin adjustment",
+        });
+        if (error) {
+          if (String(error.message).includes("insufficient_tokens")) return json({ error: "That would take the balance below 0" }, 400);
+          throw error;
+        }
+        return json({ ok: true, balance: data });
       }
 
       default:

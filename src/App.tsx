@@ -8,6 +8,8 @@ import Profile from "./pages/Profile";
 import AuthCallback from "./pages/AuthCallback";
 import Privacy from "./pages/Privacy";
 import Admin from "./pages/admin/Admin";
+import TokensPage from "./pages/TokensPage";
+import { TokensProvider } from "./lib/tokens";
 
 import { trackPageview } from "./lib/track";
 
@@ -46,6 +48,7 @@ function Shell() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/tokens" element={<TokensPage />} />
         {/* The old home page is retired; old links land on the new one */}
         <Route path="/classic" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -57,6 +60,7 @@ function Shell() {
 export default function App() {
   return (
     <AuthProvider>
+      <TokensProvider>
       <RouterRoutes>
         <Route path="/admin/*" element={<Admin />} />
         <Route path="/" element={<Landing videoHero />} />
@@ -90,6 +94,7 @@ export default function App() {
         />
         <Route path="*" element={<Shell />} />
       </RouterRoutes>
+      </TokensProvider>
     </AuthProvider>
   );
 }

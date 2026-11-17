@@ -1,0 +1,409 @@
+-- ============================================================
+-- Senevon Tokens: wallet, per-play pricing, subscriptions, ad rewards
+-- Run in: Supabase Dashboard → SQL Editor (after schema.sql and admin.sql)
+--
+-- Security model
+--   * Players can READ their own wallet, ledger, subscription and ad views,
+--     and anyone can read game prices and plan prices.
+--   * Nobody writes these tables from the browser. Every balance change goes through
+--     the SECURITY DEFINER functions below, which check the rules on the server:
+--       token_wallet()          creates the wallet, grants the 1,000 signup bonus once,
+--                               and credits any subscription tokens that are due
+--       spend_for_play(game)    charges the game's price for one play
+--       start_ad_view(...)      opens an ad view (daily cap checked)
+--       claim_ad_reward(view)   pays 50 tokens if the ad stayed open long enough
+--       mock_subscribe(...)     TEST checkout, only while payments_mode = "mock"
+--       cancel_subscription()
+--   * Admin changes (prices, grants, payments mode) go through the `admin` Edge Function
+--     with the service-role key.
+--
+-- IMPORTANT before launch: switch site_settings.payments_mode to "live" (admin panel →
+-- Tokens). In "mock" mode anyone signed in can "subscribe" for free.
+-- ============================================================
+
+-- 0) Settings ---------------------------------------------------
+insert into public.site_settings (key, value) values
+  ('payments_mode', '"mock"'::jsonb)
+on conflict (key) do nothing;
+
+-- 1) Wallets + ledger --------------------------------------------
+create table if not exists public.token_wallets (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  balance integer not null default 0 check (balance >= 0),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.token_ledger (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  delta integer not null,
+  balance_after integer not null,
+  reason text not null check (reason in ('signup', 'play', 'ad', 'subscription', 'admin')),
+  ref text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists token_ledger_user_time on public.token_ledger (user_id, created_at desc);
+-- the signup bonus can only ever be granted once per account
+create unique index if not exists token_ledger_one_signup on public.token_ledger (user_id) where reason = 'signup';
+-- each subscription credit is unique (stops double credits if two requests race)
+create unique index if not exists token_ledger_sub_ref on public.token_ledger (ref) where reason = 'subscription';
+
+-- 2) Prices --------------------------------------------------------
+create table if not exists public.game_prices (
+  game_id text primary key,
+  cost integer not null default 0 check (cost >= 0),   -- tokens per play; 0 = free
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.plan_prices (
+  currency text not null,                               -- ISO 4217, e.g. INR
+  plan text not null check (plan in ('monthly', 'yearly')),
+  amount numeric(10, 2) not null check (amount > 0),
+  primary key (currency, plan)
+);
+
+insert into public.plan_prices (currency, plan, amount) values
+  ('INR', 'monthly', 49), ('INR', 'yearly', 399),
+  ('USD', 'monthly', 0.99), ('USD', 'yearly', 7.99),
+  ('EUR', 'monthly', 0.99), ('EUR', 'yearly', 7.49),
+  ('GBP', 'monthly', 0.99), ('GBP', 'yearly', 6.99)
+on conflict (currency, plan) do nothing;
+
+-- 3) Subscriptions -------------------------------------------------
+create table if not exists public.subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plan text not null check (plan in ('monthly', 'yearly')),
+  status text not null check (status in ('active', 'cancelled', 'expired')),
+  provider text not null default 'mock',
+  provider_ref text,
+  currency text not null,
+  amount numeric(10, 2) not null,
+  started_at timestamptz not null default now(),
+  period_end timestamptz not null,       -- end of the paid period
+  next_credit_at timestamptz not null,   -- when the next 5,000 tokens are due
+  created_at timestamptz not null default now()
+);
+
+-- one running (active or cancelled-but-paid) subscription per player
+create unique index if not exists subscriptions_one_running
+  on public.subscriptions (user_id) where status in ('active', 'cancelled');
+
+-- 4) Ad views ------------------------------------------------------
+create table if not exists public.ad_views (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source text not null check (source in ('network', 'house')),
+  ad_id uuid,
+  started_at timestamptz not null default now(),
+  claimed_at timestamptz
+);
+create index if not exists ad_views_user_time on public.ad_views (user_id, started_at desc);
+
+-- 5) Row level security -------------------------------------------
+alter table public.token_wallets enable row level security;
+alter table public.token_ledger enable row level security;
+alter table public.game_prices enable row level security;
+alter table public.plan_prices enable row level security;
+alter table public.subscriptions enable row level security;
+alter table public.ad_views enable row level security;
+
+drop policy if exists "Own wallet" on public.token_wallets;
+create policy "Own wallet" on public.token_wallets for select to authenticated using (auth.uid() = user_id);
+drop policy if exists "Own ledger" on public.token_ledger;
+create policy "Own ledger" on public.token_ledger for select to authenticated using (auth.uid() = user_id);
+drop policy if exists "Own subscriptions" on public.subscriptions;
+create policy "Own subscriptions" on public.subscriptions for select to authenticated using (auth.uid() = user_id);
+drop policy if exists "Own ad views" on public.ad_views;
+create policy "Own ad views" on public.ad_views for select to authenticated using (auth.uid() = user_id);
+drop policy if exists "Public game prices" on public.game_prices;
+create policy "Public game prices" on public.game_prices for select to anon, authenticated using (true);
+drop policy if exists "Public plan prices" on public.plan_prices;
+create policy "Public plan prices" on public.plan_prices for select to anon, authenticated using (true);
+-- No insert / update / delete policies on purpose.
+
+-- 6) Constants -----------------------------------------------------
+create or replace function public._tok_const(p_name text)
+returns integer language sql immutable as $$
+  select case p_name
+    when 'signup_bonus' then 1000
+    when 'sub_tokens' then 5000      -- per month, both plans
+    when 'ad_reward' then 50
+    when 'ad_daily_cap' then 10
+    when 'ad_min_seconds' then 12    -- house ads run 15 s; network ads are usually longer
+  end
+$$;
+
+-- 7) Internal helpers (not callable from the browser) ----------------
+create or replace function public._tok_credit(p_user uuid, p_delta integer, p_reason text, p_ref text)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_balance integer;
+begin
+  insert into token_wallets (user_id, balance) values (p_user, 0) on conflict (user_id) do nothing;
+  select balance into v_balance from token_wallets where user_id = p_user for update;
+  if v_balance + p_delta < 0 then
+    raise exception 'insufficient_tokens';
+  end if;
+  v_balance := v_balance + p_delta;
+  update token_wallets set balance = v_balance, updated_at = now() where user_id = p_user;
+  insert into token_ledger (user_id, delta, balance_after, reason, ref)
+  values (p_user, p_delta, v_balance, p_reason, p_ref);
+  return v_balance;
+end;
+$$;
+
+-- Credits subscription tokens that are due (5,000 each month). In mock mode an active
+-- subscription renews itself at the end of each paid period, as a real auto-renewal would.
+create or replace function public._tok_process_subscription(p_user uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  s subscriptions%rowtype;
+  guard integer := 0;
+begin
+  select * into s from subscriptions
+  where user_id = p_user and status in ('active', 'cancelled')
+  for update;
+  if not found then return; end if;
+
+  while s.next_credit_at <= now() and guard < 48 loop
+    guard := guard + 1;
+    if s.next_credit_at >= s.period_end then
+      if s.status = 'active' and s.provider = 'mock' then
+        s.period_end := s.period_end + (case s.plan when 'monthly' then interval '1 month' else interval '1 year' end);
+      else
+        s.status := 'expired';
+        exit;
+      end if;
+    end if;
+    begin
+      perform _tok_credit(p_user, _tok_const('sub_tokens'), 'subscription', s.id::text || ':' || to_char(s.next_credit_at, 'YYYY-MM-DD"T"HH24:MI:SS'));
+    exception when unique_violation then
+      null; -- already credited by a concurrent request
+    end;
+    s.next_credit_at := s.next_credit_at + interval '1 month';
+  end loop;
+
+  -- a cancelled subscription ends once its paid period is over
+  if s.status = 'cancelled' and s.period_end <= now() then
+    s.status := 'expired';
+  end if;
+
+  update subscriptions
+  set status = s.status, period_end = s.period_end, next_credit_at = s.next_credit_at
+  where id = s.id;
+end;
+$$;
+
+create or replace function public._tok_ads_today(p_user uuid)
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::integer from ad_views
+  where user_id = p_user and claimed_at is not null and claimed_at >= date_trunc('day', now())
+$$;
+
+create or replace function public._tok_state(p_user uuid)
+returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_build_object(
+    'balance', coalesce((select balance from token_wallets where user_id = p_user), 0),
+    'subscription', (
+      select to_jsonb(x) from (
+        select id, plan, status, provider, currency, amount, started_at, period_end, next_credit_at
+        from subscriptions where user_id = p_user and status in ('active', 'cancelled')
+        order by created_at desc limit 1
+      ) x
+    ),
+    'ads_today', _tok_ads_today(p_user),
+    'ad_daily_cap', _tok_const('ad_daily_cap'),
+    'ad_reward', _tok_const('ad_reward'),
+    'ad_min_seconds', _tok_const('ad_min_seconds'),
+    'sub_tokens', _tok_const('sub_tokens'),
+    'payments_mode', coalesce((select value #>> '{}' from site_settings where key = 'payments_mode'), 'mock')
+  )
+$$;
+
+-- 8) Player-callable functions ---------------------------------------
+
+-- Wallet state. First call for an account grants the signup bonus (once, ever).
+create or replace function public.token_wallet()
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  if not exists (select 1 from token_ledger where user_id = v_user and reason = 'signup') then
+    begin
+      perform _tok_credit(v_user, _tok_const('signup_bonus'), 'signup', 'welcome');
+    exception when unique_violation then
+      null;
+    end;
+  end if;
+  perform _tok_process_subscription(v_user);
+  return _tok_state(v_user);
+end;
+$$;
+
+-- Pay for one play of a game. Free games (no price row, or cost 0) cost nothing.
+create or replace function public.spend_for_play(p_game text)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_cost integer;
+  v_balance integer;
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  select cost into v_cost from game_prices where game_id = p_game;
+  v_cost := coalesce(v_cost, 0);
+  perform token_wallet(); -- make sure the wallet exists and due subscription tokens are in
+  if v_cost = 0 then
+    return jsonb_build_object('ok', true, 'cost', 0) || _tok_state(v_user);
+  end if;
+  select balance into v_balance from token_wallets where user_id = v_user;
+  if coalesce(v_balance, 0) < v_cost then
+    return jsonb_build_object('ok', false, 'reason', 'insufficient', 'cost', v_cost) || _tok_state(v_user);
+  end if;
+  perform _tok_credit(v_user, -v_cost, 'play', p_game);
+  return jsonb_build_object('ok', true, 'cost', v_cost) || _tok_state(v_user);
+end;
+$$;
+
+-- Open an ad view. Returns its id; the reward is claimed with claim_ad_reward().
+create or replace function public.start_ad_view(p_source text, p_ad uuid default null)
+returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_id uuid;
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  if p_source not in ('network', 'house') then raise exception 'bad_source'; end if;
+  if _tok_ads_today(v_user) >= _tok_const('ad_daily_cap') then raise exception 'ad_cap_reached'; end if;
+  -- at most a few open views at once (stops pre-opening a stack of views)
+  if (select count(*) from ad_views where user_id = v_user and claimed_at is null
+      and started_at > now() - interval '10 minutes') >= 3 then
+    raise exception 'too_many_open_ads';
+  end if;
+  insert into ad_views (user_id, source, ad_id) values (v_user, p_source, p_ad) returning id into v_id;
+  return v_id;
+end;
+$$;
+
+create or replace function public.claim_ad_reward(p_view uuid)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v ad_views%rowtype;
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  select * into v from ad_views where id = p_view and user_id = v_user for update;
+  if not found then raise exception 'unknown_ad_view'; end if;
+  if v.claimed_at is not null then raise exception 'already_claimed'; end if;
+  if now() - v.started_at < make_interval(secs => _tok_const('ad_min_seconds')) then
+    raise exception 'ad_not_finished';
+  end if;
+  if v.started_at < now() - interval '30 minutes' then raise exception 'ad_view_expired'; end if;
+  if _tok_ads_today(v_user) >= _tok_const('ad_daily_cap') then raise exception 'ad_cap_reached'; end if;
+  update ad_views set claimed_at = now() where id = p_view;
+  perform _tok_credit(v_user, _tok_const('ad_reward'), 'ad', p_view::text);
+  return _tok_state(v_user);
+end;
+$$;
+
+-- TEST checkout. Refuses unless payments_mode is "mock". A real provider will create
+-- subscriptions from its webhook (service role) instead.
+create or replace function public.mock_subscribe(p_plan text, p_currency text)
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_mode text;
+  v_amount numeric(10, 2);
+  v_currency text := upper(coalesce(p_currency, 'USD'));
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  select value #>> '{}' into v_mode from site_settings where key = 'payments_mode';
+  if coalesce(v_mode, 'mock') <> 'mock' then raise exception 'mock_payments_disabled'; end if;
+  if p_plan not in ('monthly', 'yearly') then raise exception 'bad_plan'; end if;
+
+  perform token_wallet();
+  if exists (select 1 from subscriptions where user_id = v_user and status in ('active', 'cancelled')) then
+    raise exception 'already_subscribed';
+  end if;
+
+  select amount into v_amount from plan_prices where currency = v_currency and plan = p_plan;
+  if v_amount is null then
+    v_currency := 'USD';
+    select amount into v_amount from plan_prices where currency = 'USD' and plan = p_plan;
+  end if;
+
+  insert into subscriptions (user_id, plan, status, provider, currency, amount, period_end, next_credit_at)
+  values (
+    v_user, p_plan, 'active', 'mock', v_currency, coalesce(v_amount, 0),
+    now() + (case p_plan when 'monthly' then interval '1 month' else interval '1 year' end),
+    now()
+  );
+  perform _tok_process_subscription(v_user); -- first 5,000 tokens straight away
+  return _tok_state(v_user);
+end;
+$$;
+
+-- Stop renewing. Tokens already paid for keep arriving until the paid period ends
+-- (a yearly plan keeps its monthly drops for the rest of the year).
+create or replace function public.cancel_subscription()
+returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  update subscriptions set status = 'cancelled' where user_id = v_user and status = 'active';
+  perform _tok_process_subscription(v_user);
+  return _tok_state(v_user);
+end;
+$$;
+
+-- Admin grant (service role only — used by the admin Edge Function).
+create or replace function public.admin_grant_tokens(p_user uuid, p_amount integer, p_note text)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  return _tok_credit(p_user, p_amount, 'admin', left(coalesce(p_note, ''), 200));
+end;
+$$;
+
+-- 9) Permissions ----------------------------------------------------
+revoke all on function public._tok_credit(uuid, integer, text, text) from public, anon, authenticated;
+revoke all on function public._tok_process_subscription(uuid) from public, anon, authenticated;
+revoke all on function public._tok_ads_today(uuid) from public, anon, authenticated;
+revoke all on function public._tok_state(uuid) from public, anon, authenticated;
+revoke all on function public.admin_grant_tokens(uuid, integer, text) from public, anon, authenticated;
+grant execute on function public.admin_grant_tokens(uuid, integer, text) to service_role;
+
+revoke all on function public.token_wallet() from public, anon;
+revoke all on function public.spend_for_play(text) from public, anon;
+revoke all on function public.start_ad_view(text, uuid) from public, anon;
+revoke all on function public.claim_ad_reward(uuid) from public, anon;
+revoke all on function public.mock_subscribe(text, text) from public, anon;
+revoke all on function public.cancel_subscription() from public, anon;
+grant execute on function public.token_wallet() to authenticated;
+grant execute on function public.spend_for_play(text) to authenticated;
+grant execute on function public.start_ad_view(text, uuid) to authenticated;
+grant execute on function public.claim_ad_reward(uuid) to authenticated;
+grant execute on function public.mock_subscribe(text, text) to authenticated;
+grant execute on function public.cancel_subscription() to authenticated;

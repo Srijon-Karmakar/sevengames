@@ -10,6 +10,9 @@ import { useBestForGame } from "../hooks/useBest";
 import Leaderboard from "../components/Leaderboard";
 import { trackGame } from "../lib/track";
 import { pushRecent } from "../lib/recent";
+import { useGameCost } from "../lib/tokens";
+import { formatTokens } from "../lib/currency";
+import PlayGate from "../components/PlayGate";
 import "./game-page.css";
 import "../games/game-skin.css";
 import "./game-neu.css";
@@ -29,6 +32,16 @@ export default function GamePage() {
   const best = useBestForGame(id ?? "");
   const { leaders, loading } = useLeaderboard(id ?? "");
   const stageRef = useRef<HTMLElement>(null);
+  // Tokens: premium games (cost > 0) are paid per play. `paidPlay` counts paid plays (it also
+  // remounts the game fresh for each one); `locked` puts the gate back up after a finished match.
+  const cost = useGameCost(game?.id);
+  const premium = (cost ?? 0) > 0;
+  const premiumRef = useRef(premium);
+  premiumRef.current = premium;
+  const [paidPlay, setPaidPlay] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const lockTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(lockTimer.current), []);
   // "full" = native Fullscreen API when available, otherwise a fixed overlay (e.g. iPhone Safari).
   const [full, setFull] = useState(false);
 
@@ -114,6 +127,11 @@ export default function GamePage() {
     async (score: number) => {
       if (game) {
         trackGame("game_finish", game.id, score);
+        // premium: let the result show for a moment, then ask to pay for the next play
+        if (premiumRef.current) {
+          window.clearTimeout(lockTimer.current);
+          lockTimer.current = window.setTimeout(() => setLocked(true), 1800);
+        }
         await saveScore(game.id, score, 0);
       }
     },
@@ -135,6 +153,9 @@ export default function GamePage() {
             <li>{game.category}</li>
             <li>{game.difficulty}</li>
             <li>~{game.minutes} min</li>
+            {cost !== null ? (
+              <li className={premium ? "gp-chip-cost" : "gp-chip-free"}>{premium ? `${formatTokens(cost)} tokens / play` : "Free"}</li>
+            ) : null}
             {best !== null ? <li className="gp-chip-best">Best: {best}</li> : null}
           </ul>
           <p className="hero-sub">{game.description}</p>
@@ -201,12 +222,32 @@ export default function GamePage() {
                 <span>Exit</span>
               </button>
             ) : null}
-            {game.kind === "builtin" ? (
-              <GameRunner gameId={game.engine} onScore={handleFinish} />
+            {cost === null ? (
+              <p className="empty-note">Loading…</p>
+            ) : premium && paidPlay === 0 ? (
+              <PlayGate gameId={game.id} gameTitle={game.title} cost={cost} again={false} onPaid={() => setPaidPlay(1)} />
             ) : (
-              <div className="iframe-wrap">
-                <iframe src={game.embedUrl} title={game.title} allow="gamepad; fullscreen" />
-              </div>
+              <>
+                {game.kind === "builtin" ? (
+                  <GameRunner key={paidPlay} gameId={game.engine} onScore={handleFinish} />
+                ) : (
+                  <div className="iframe-wrap">
+                    <iframe src={game.embedUrl} title={game.title} allow="gamepad; fullscreen" />
+                  </div>
+                )}
+                {premium && locked ? (
+                  <PlayGate
+                    gameId={game.id}
+                    gameTitle={game.title}
+                    cost={cost}
+                    again
+                    onPaid={() => {
+                      setLocked(false);
+                      setPaidPlay((n) => n + 1);
+                    }}
+                  />
+                ) : null}
+              </>
             )}
           </section>
         </div>

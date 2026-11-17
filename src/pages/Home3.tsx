@@ -5,6 +5,7 @@ import { categories, games, scoreLabel, type Game, type GameCategory } from "../
 import { categoryIcon } from "../lib/categoryIcons";
 import { useBestForGame } from "../hooks/useBest";
 import NavAccount from "../components/NavAccount";
+import TokenPill from "../components/TokenPill";
 import FeatureCarousel from "../components/FeatureCarousel";
 import LaptopIconSmoke from "../components/LaptopIconSmoke";
 import "../components/feature-carousel.css";
@@ -264,6 +265,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
             <div className="h3-menu h3-menu-end">
               <Link to="/games">All games</Link>
             </div>
+            <TokenPill />
             <NavAccount />
           </div>
         ) : (

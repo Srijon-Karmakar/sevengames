@@ -9,6 +9,8 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: VITE_GAM_REWARDED_UNIT
+        sync: false
     routes:
       # SPA fallback: serve index.html for any path without a file extension
       - type: rewrite

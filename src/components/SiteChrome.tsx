@@ -4,6 +4,7 @@ import { House, Moon, Sun, Trophy } from "lucide-react";
 import { categories, games } from "../catalog";
 import { categoryIcon } from "../lib/categoryIcons";
 import NavAccount from "./NavAccount";
+import TokenPill from "./TokenPill";
 import { useGameTheme } from "../hooks/useGameTheme";
 import "../pages/home3.css";
 import "./site-chrome.css";
@@ -54,6 +55,7 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
             </Link>
           </div>
           <div className="h3-nav-end">
+            <TokenPill />
             {isGame ? (
               <button
                 type="button"

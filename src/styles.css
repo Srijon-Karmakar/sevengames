@@ -1602,3 +1602,16 @@ h3 {
   .ad-body { flex-wrap: wrap; }
   .ad-cta { width: 100%; text-align: center; }
 }
+
+/* Admin → Tokens: stacked cards */
+.adm-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.adm-stack .adm-msg {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 138, 61, 0.12);
+}
