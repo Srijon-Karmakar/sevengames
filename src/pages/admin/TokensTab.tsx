@@ -11,6 +11,12 @@ type Config = {
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
+const savedCosts = (c: Config) =>
+  Object.fromEntries(games.map((g) => [g.id, String(c.game_prices.find((p) => p.game_id === g.id)?.cost ?? 0)]));
+
+/** "" or junk → "0"; otherwise a whole, non-negative number as text */
+const cleanCost = (v: string) => String(Math.max(0, Math.round(Number(v.trim() || 0) || 0)));
+
 /** Admin → Tokens: payments mode, per-game prices, subscription prices per currency, grants. */
 export default function TokensTab() {
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -20,11 +26,12 @@ export default function TokensTab() {
   const [grant, setGrant] = useState({ email: "", amount: "", note: "" });
   const [lookup, setLookup] = useState<string>("");
 
-  const load = () =>
+  // `resetCosts` = drop unsaved price edits (first load, after "save all" / "discard")
+  const load = (resetCosts = true) =>
     adminCall<Config>("tokens_config").then(
       (c) => {
         setCfg(c);
-        setCosts(Object.fromEntries(games.map((g) => [g.id, String(c.game_prices.find((p) => p.game_id === g.id)?.cost ?? 0)])));
+        if (resetCosts) setCosts(savedCosts(c));
       },
       (e) => setMsg(errText(e, "Failed to load (did you run supabase/tokens.sql and redeploy the admin function?)")),
     );
@@ -37,7 +44,7 @@ export default function TokensTab() {
     try {
       await adminCall(action, payload);
       setMsg(done);
-      await load();
+      await load(false); // keep other unsaved price edits
       void loadGamePrices(true);
     } catch (e) {
       setMsg(errText(e, "Failed"));
@@ -82,55 +89,26 @@ export default function TokensTab() {
       </div>
 
       {/* ---------- Game prices ---------- */}
-      <div className="card adm-card adm-settings">
-        <h3>Game prices</h3>
-        <p className="adm-note">Tokens per play. 0 = free game. Premium games ask players to pay before each new play.</p>
-        <div className="adm-table-wrap">
-          <table className="adm-table">
-            <thead>
-              <tr>
-                <th>Game</th>
-                <th>Tokens / play</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {games.map((g) => {
-                const saved = String(cfg?.game_prices.find((p) => p.game_id === g.id)?.cost ?? 0);
-                const val = costs[g.id] ?? saved;
-                return (
-                  <tr key={g.id}>
-                    <td>
-                      {g.title} <span className="adm-note">· {g.category}</span>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min={0}
-                        step={5}
-                        value={val}
-                        style={{ width: 110 }}
-                        aria-label={`${g.title} tokens per play`}
-                        onChange={(e) => setCosts((c) => ({ ...c, [g.id]: e.target.value }))}
-                      />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="ghost-btn"
-                        disabled={val === saved}
-                        onClick={() => void run("game_price_set", { game_id: g.id, cost: Number(val) }, `${g.title}: ${Number(val) || "free"}${Number(val) ? " tokens per play" : ""}.`)}
-                      >
-                        Save
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <GamePrices
+        cfg={cfg}
+        costs={costs}
+        setCosts={setCosts}
+        onSaveOne={(id, title, cost) =>
+          run("game_price_set", { game_id: id, cost }, `${title}: ${cost ? `${cost} tokens per play` : "free"}.`)
+        }
+        onSaveAll={async (rows) => {
+          setMsg("");
+          try {
+            await adminCall("game_prices_set_bulk", { prices: rows });
+            setMsg(`Saved ${rows.length} game price${rows.length === 1 ? "" : "s"}.`);
+            await load(true);
+            void loadGamePrices(true);
+          } catch (e) {
+            setMsg(errText(e, "Failed to save prices"));
+          }
+        }}
+        onDiscard={() => cfg && setCosts(savedCosts(cfg))}
+      />
 
       {/* ---------- Subscription prices ---------- */}
       <div className="card adm-card adm-settings">
@@ -401,6 +379,148 @@ function RedeemCard() {
                 <td colSpan={3}>Nobody has redeemed the code yet.</td>
               </tr>
             ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Game prices: per-row edit + bulk edit ---------- */
+
+function GamePrices({
+  cfg,
+  costs,
+  setCosts,
+  onSaveOne,
+  onSaveAll,
+  onDiscard,
+}: {
+  cfg: Config | null;
+  costs: Record<string, string>;
+  setCosts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  onSaveOne: (id: string, title: string, cost: number) => Promise<void>;
+  onSaveAll: (rows: { game_id: string; cost: number }[]) => Promise<void>;
+  onDiscard: () => void;
+}) {
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkScope, setBulkScope] = useState("all");
+  const [saving, setSaving] = useState(false);
+
+  const categories = [...new Set(games.map((g) => g.category))];
+  const saved = (id: string) => String(cfg?.game_prices.find((p) => p.game_id === id)?.cost ?? 0);
+  const valueOf = (id: string) => costs[id] ?? saved(id);
+  const dirty = games.filter((g) => cleanCost(valueOf(g.id)) !== saved(g.id));
+  const inScope = (g: (typeof games)[number]) => bulkScope === "all" || g.category === bulkScope;
+  const premiumCount = games.filter((g) => Number(cleanCost(valueOf(g.id))) > 0).length;
+
+  function applyBulk(value: string) {
+    const v = cleanCost(value);
+    setCosts((c) => {
+      const next = { ...c };
+      for (const g of games) if (inScope(g)) next[g.id] = v;
+      return next;
+    });
+  }
+
+  async function saveAll() {
+    setSaving(true);
+    await onSaveAll(dirty.map((g) => ({ game_id: g.id, cost: Number(cleanCost(valueOf(g.id))) })));
+    setSaving(false);
+  }
+
+  return (
+    <div className="card adm-card adm-settings">
+      <h3>Game prices</h3>
+      <p className="adm-note">
+        Tokens per play. 0 = free game. Premium games ask players to pay before each new play. {premiumCount} of {games.length}{" "}
+        games are premium.
+      </p>
+
+      {/* bulk bar */}
+      <div className="adm-bulk">
+        <label>
+          Set
+          <select value={bulkScope} onChange={(e) => setBulkScope(e.target.value)} aria-label="Which games to set">
+            <option value="all">all games</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c} games
+              </option>
+            ))}
+          </select>
+          to
+          <input
+            type="number"
+            min={0}
+            step={5}
+            value={bulkValue}
+            placeholder="tokens"
+            style={{ width: 100 }}
+            aria-label="Tokens per play for the selected games"
+            onChange={(e) => setBulkValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && bulkValue !== "" && applyBulk(bulkValue)}
+          />
+        </label>
+        <button type="button" className="ghost-btn" disabled={bulkValue === ""} onClick={() => applyBulk(bulkValue)}>
+          Apply
+        </button>
+        <button type="button" className="ghost-btn" onClick={() => applyBulk("0")}>
+          Make {bulkScope === "all" ? "all" : bulkScope} free
+        </button>
+        <span className="adm-bulk-spacer" />
+        <button type="button" className="ghost-btn" disabled={!dirty.length || saving} onClick={onDiscard}>
+          Discard
+        </button>
+        <button type="button" className="primary-btn" disabled={!dirty.length || saving} onClick={() => void saveAll()}>
+          {saving ? "Saving…" : dirty.length ? `Save ${dirty.length} change${dirty.length === 1 ? "" : "s"}` : "No changes"}
+        </button>
+      </div>
+
+      <div className="adm-table-wrap">
+        <table className="adm-table">
+          <thead>
+            <tr>
+              <th>Game</th>
+              <th>Tokens / play</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {games.map((g) => {
+              const val = valueOf(g.id);
+              const isDirty = cleanCost(val) !== saved(g.id);
+              return (
+                <tr key={g.id} className={isDirty ? "adm-row-dirty" : undefined}>
+                  <td>
+                    {g.title} <span className="adm-note">· {g.category}</span>
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      step={5}
+                      value={val}
+                      placeholder="0"
+                      style={{ width: 110 }}
+                      aria-label={`${g.title} tokens per play`}
+                      onChange={(e) => setCosts((c) => ({ ...c, [g.id]: e.target.value }))}
+                    />
+                    {isDirty ? <span className="adm-note"> was {saved(g.id)}</span> : null}
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={!isDirty}
+                      onClick={() => void onSaveOne(g.id, g.title, Number(cleanCost(val)))}
+                    >
+                      Save
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

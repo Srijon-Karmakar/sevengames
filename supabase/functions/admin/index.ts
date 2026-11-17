@@ -481,6 +481,23 @@ Deno.serve(async (req) => {
         return json({ ok: true });
       }
 
+      case "game_prices_set_bulk": {
+        const list = Array.isArray(body.prices) ? (body.prices as Record<string, unknown>[]) : [];
+        const now = new Date().toISOString();
+        const rows = list
+          .slice(0, 500)
+          .map((p) => ({
+            game_id: text(p.game_id, 80),
+            cost: Math.max(0, Math.min(1_000_000, Math.round(Number(p.cost) || 0))),
+            updated_at: now,
+          }))
+          .filter((r) => r.game_id);
+        if (!rows.length) return json({ error: "Nothing to save" }, 400);
+        const { error } = await db.from("game_prices").upsert(rows);
+        if (error) throw error;
+        return json({ ok: true, saved: rows.length });
+      }
+
       case "plan_price_set": {
         const currency = text(body.currency, 3).toUpperCase();
         const plan = body.plan === "yearly" ? "yearly" : "monthly";
