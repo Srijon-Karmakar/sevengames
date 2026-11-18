@@ -52,6 +52,7 @@ import { STRIKERS, type StrikerSkin } from "./skins";
 import { matchXp, useCarromProgress } from "./progress";
 import { CPU_STATS, FAIR_STATS, tierOf, type StrikerStats } from "./stats";
 import CarromLocker, { LevelBar } from "./Locker";
+import { BoardPreview } from "./Preview";
 import "./carrom.css";
 
 type Mode = "cpu" | "local2" | "local4" | "host2" | "host4" | "join";
@@ -159,6 +160,7 @@ export default function CarromGame({ onFinish }: GameProps) {
   const [isHost, setIsHost] = useState(false);
   const [secsLeft, setSecsLeft] = useState(TURN_SECONDS);
   const [placeT, setPlaceT] = useState(500);
+  const [onlineOpen, setOnlineOpen] = useState(false);
 
   const setPhase = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -908,53 +910,66 @@ export default function CarromGame({ onFinish }: GameProps) {
   if (screen === "menu" || screen === "join-form") {
     return (
       <div className="game-surface carrom-surface">
-        <p className="game-status">
-          {screen === "join-form" ? "Join with a 4-character room code" : "Carrom — pick a mode"}
-        </p>
+        {screen === "join-form" ? <p className="game-status">Join with a 4-character room code</p> : null}
         {screen === "menu" ? (
-          <div className="carrom-menu">
-            <button type="button" className="carrom-profile" onClick={() => setPhase("locker")}>
-              <LevelBar level={prog.level} xp={prog.xp} pro={prog.pro} compact />
-              <span className="carrom-profile-cta">Locker & shop ›</span>
-            </button>
-            <div className="carrom-format" role="radiogroup" aria-label="Match length">
-              <button type="button" role="radio" aria-checked={format === "board"} className={format === "board" ? "on" : ""} onClick={() => setFormat("board")}>
-                Quick · 1 board
+          <>
+            {/* the board first, ready to play; the choices sit underneath it */}
+            <BoardPreview />
+            <div className="carrom-start">
+              <button type="button" className="carrom-start-main" onClick={() => startLocal("cpu")}>
+                <span className="carrom-start-play" aria-hidden="true">
+                  ▶
+                </span>
+                Play vs CPU
               </button>
-              <button type="button" role="radio" aria-checked={format === "match"} className={format === "match" ? "on" : ""} onClick={() => setFormat("match")}>
-                Match · first to {MATCH_TARGET}
+
+              <div className="carrom-format" role="radiogroup" aria-label="Match length">
+                <button type="button" role="radio" aria-checked={format === "board"} className={format === "board" ? "on" : ""} onClick={() => setFormat("board")}>
+                  Quick · 1 board
+                </button>
+                <button type="button" role="radio" aria-checked={format === "match"} className={format === "match" ? "on" : ""} onClick={() => setFormat("match")}>
+                  Match · to {MATCH_TARGET}
+                </button>
+              </div>
+
+              <div className="carrom-start-more" aria-label="More ways to play">
+                <button type="button" className="carrom-chip-btn" onClick={() => startLocal("local2")}>
+                  2P · same device
+                </button>
+                <button type="button" className="carrom-chip-btn" onClick={() => startLocal("local4")}>
+                  4P · teams
+                </button>
+                <button
+                  type="button"
+                  className={`carrom-chip-btn${onlineOpen ? " on" : ""}`}
+                  aria-expanded={onlineOpen}
+                  disabled={!CarromNet.configured}
+                  title={CarromNet.configured ? "Play online" : "Online play needs Supabase"}
+                  onClick={() => setOnlineOpen((o) => !o)}
+                >
+                  Online {onlineOpen ? "▴" : "▾"}
+                </button>
+              </div>
+              {onlineOpen ? (
+                <div className="carrom-start-more is-online">
+                  <button type="button" className="carrom-chip-btn" onClick={() => hostRoom(2)}>
+                    Host · 2P
+                  </button>
+                  <button type="button" className="carrom-chip-btn" onClick={() => hostRoom(4)}>
+                    Host · 4P
+                  </button>
+                  <button type="button" className="carrom-chip-btn" onClick={() => setPhase("join-form")}>
+                    Join a room
+                  </button>
+                </div>
+              ) : null}
+
+              <button type="button" className="carrom-profile carrom-start-profile" onClick={() => setPhase("locker")}>
+                <LevelBar level={prog.level} xp={prog.xp} pro={prog.pro} compact />
+                <span className="carrom-profile-cta">Locker & shop ›</span>
               </button>
             </div>
-            <button type="button" className="primary-btn" onClick={() => startLocal("cpu")}>
-              Single player vs CPU
-            </button>
-            <button type="button" className="primary-btn" onClick={() => startLocal("local2")}>
-              2 players · same device
-            </button>
-            <button type="button" className="primary-btn" onClick={() => startLocal("local4")}>
-              4 players · teams
-            </button>
-            <div className="carrom-menu-sep" />
-            <button type="button" className="ghost-btn" disabled={!CarromNet.configured} onClick={() => hostRoom(2)}>
-              Host online · 2 players
-            </button>
-            <button type="button" className="ghost-btn" disabled={!CarromNet.configured} onClick={() => hostRoom(4)}>
-              Host online · 4 players
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={!CarromNet.configured}
-              onClick={() => setPhase("join-form")}
-            >
-              Join a room
-            </button>
-            {!CarromNet.configured ? (
-              <p className="carrom-hint">
-                Online play needs Supabase — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.
-              </p>
-            ) : null}
-          </div>
+          </>
         ) : (
           <form
             className="carrom-join"

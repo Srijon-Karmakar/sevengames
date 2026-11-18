@@ -1053,3 +1053,112 @@
     animation: none;
   }
 }
+
+/* ============================================================
+   Start screen: board first, compact choices underneath
+   ============================================================ */
+.carrom-start {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: min(600px, 100%);
+}
+
+.carrom-start-main {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: min(360px, 100%);
+  height: 54px;
+  padding: 0 26px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  color: #1f0c00;
+  background: linear-gradient(145deg, #ffa55e, #f26a0c);
+  box-shadow: 0 12px 26px -10px rgba(244, 96, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease;
+}
+
+@media (hover: hover) {
+  .carrom-start-main:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.05);
+  }
+}
+
+.carrom-start-main:active {
+  transform: scale(0.97);
+}
+
+.carrom-start-play {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 14px;
+  color: #f26a0c;
+  background: #fff;
+  box-shadow: 0 4px 10px -4px rgba(120, 40, 0, 0.6);
+}
+
+.carrom-start-more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.carrom-start-more.is-online {
+  animation: carrom-pop 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.carrom-chip-btn {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.carrom-chip-btn:hover:not(:disabled),
+.carrom-chip-btn.on {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.carrom-chip-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.carrom-chip-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.carrom-start-profile {
+  width: min(360px, 100%);
+}
+
+@media (max-width: 420px) {
+  .carrom-start-main {
+    height: 50px;
+    font-size: 16px;
+  }
+
+  .carrom-chip-btn {
+    height: 34px;
+    padding: 0 12px;
+    font-size: 12.5px;
+  }
+}

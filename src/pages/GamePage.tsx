@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronLeft, ExternalLink, Info, Maximize, Minimize, MonitorPlay } from "lucide-react";
+import { ChevronLeft, ExternalLink, Info, Maximize, Minimize, MonitorPlay, Store } from "lucide-react";
 import { GamePoster } from "../components/GamePoster";
 import { getGame, scoreLabel } from "../catalog";
 import { engines, previews } from "../games";
@@ -223,6 +223,10 @@ export default function GamePage() {
                 <span>Full screen</span>
                 <kbd className="gp-kbd" aria-hidden="true">F</kbd>
               </button>
+              <Link to="/tokens#buy" className="gp-shop" aria-label="Shop: get tokens" title="Shop">
+                <Store size={15} />
+                <span>Shop</span>
+              </Link>
               {game.kind === "iframe" ? (
                 <a href={game.embedUrl} target="_blank" rel="noopener noreferrer" aria-label="Open original site">
                   <ExternalLink size={15} />
@@ -242,19 +246,14 @@ export default function GamePage() {
             {cost === null ? (
               <p className="empty-note">Loading…</p>
             ) : premium && paidPlay === 0 ? (
-              <>
+              // preview of the game with the start bar UNDER it
+              <div className="gp-play-wrap">
                 <GatePreview game={game} />
                 <PlayGate gameId={game.id} gameTitle={game.title} cost={cost} again={false} onPaid={() => setPaidPlay(1)} />
-              </>
-            ) : (
-              <>
-                {game.kind === "builtin" ? (
-                  <GameRunner key={paidPlay} gameId={game.engine} onScore={handleFinish} />
-                ) : (
-                  <div className="iframe-wrap">
-                    <iframe src={game.embedUrl} title={game.title} allow="gamepad; fullscreen" />
-                  </div>
-                )}
+              </div>
+            ) : game.kind === "builtin" ? (
+              <div className="gp-play-wrap">
+                <GameRunner key={paidPlay} gameId={game.engine} onScore={handleFinish} />
                 {premium && locked ? (
                   <PlayGate
                     gameId={game.id}
@@ -267,7 +266,11 @@ export default function GamePage() {
                     }}
                   />
                 ) : null}
-              </>
+              </div>
+            ) : (
+              <div className="iframe-wrap">
+                <iframe src={game.embedUrl} title={game.title} allow="gamepad; fullscreen" />
+              </div>
             )}
           </section>
         </div>

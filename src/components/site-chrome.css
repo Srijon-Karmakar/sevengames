@@ -725,22 +725,22 @@
 
 /* Token icon in the nav pill: the coin is the icon itself (no painted circle behind it) */
 .h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin {
-  width: 22px;
-  height: 22px;
-  margin-left: -4px;
+  width: 27px;
+  height: 27px;
+  margin-left: -6px;
   background: none;
   box-shadow: none;
 }
 
 .h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin svg {
-  width: 22px;
-  height: 22px;
+  width: 27px;
+  height: 27px;
 }
 
 @media (max-width: 600px) {
   .h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin,
   .h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin svg {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
   }
 }

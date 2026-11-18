@@ -937,3 +937,87 @@
   box-shadow: none;
   filter: drop-shadow(0 0 22px rgba(158, 255, 0, 0.6));
 }
+
+/* token bolt: a glint sweeps across now and then (staggered per icon so they don't all flash at once) */
+.token-icon .token-glint {
+  animation: token-glint 5.5s ease-in-out infinite;
+}
+
+.token-icon:nth-of-type(2n) .token-glint {
+  animation-delay: 1.4s;
+}
+
+@keyframes token-glint {
+  0%,
+  62% {
+    transform: translateX(0);
+  }
+  85%,
+  100% {
+    transform: translateX(32px);
+  }
+}
+
+/* hovering something with a token in it: the glint runs right away */
+:is(a, button):hover .token-icon .token-glint {
+  animation: token-glint-now 0.7s ease-out;
+}
+
+@keyframes token-glint-now {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(32px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .token-icon .token-glint {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ============================================================
+   Start bar UNDER the game (not over it): the preview / game and the bar stack in one column
+   ============================================================ */
+.gp-play-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gp-play-wrap > .game-surface {
+  width: 100%;
+}
+
+.gp-preview,
+.carrom-preview {
+  padding-bottom: 0 !important;
+}
+
+.tk-gatebar {
+  position: static;
+  inset: auto;
+  width: 100%;
+  padding: 0;
+  background: none;
+  pointer-events: auto;
+}
+
+.tk-gatebar-inner {
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
+
+/* very narrow phones: let the extras drop under the main button */
+@media (max-width: 380px) {
+  .tk-gatebar-inner {
+    flex-wrap: wrap;
+    border-radius: 24px;
+  }
+}

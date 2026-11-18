@@ -8,7 +8,8 @@ import { useAuthContext } from "../../context/AuthContext";
 import { tierOf } from "./stats";
 import "./carrom.css";
 
-export default function CarromPreview() {
+/** Just the racked board (canvas in its stage frame). */
+export function BoardPreview() {
   const ref = useRef<HTMLCanvasElement>(null);
   const prog = useCarromProgress(useAuthContext().user);
   const { board, coinSet, striker, strikerStats } = prog;
@@ -39,10 +40,17 @@ export default function CarromPreview() {
   }, [board, coinSet, striker, strikerStats]);
 
   return (
+    <div className="carrom-stage">
+      <canvas ref={ref} width={1080} height={1080} aria-label="Carrom board, ready to play" />
+    </div>
+  );
+}
+
+/** Game-page preview (behind the premium start bar). */
+export default function CarromPreview() {
+  return (
     <div className="game-surface carrom-surface carrom-preview">
-      <div className="carrom-stage">
-        <canvas ref={ref} width={1080} height={1080} aria-label="Carrom board, ready to play" />
-      </div>
+      <BoardPreview />
     </div>
   );
 }
