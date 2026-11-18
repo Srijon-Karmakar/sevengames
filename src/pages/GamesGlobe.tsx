@@ -1,12 +1,75 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Play } from "lucide-react";
-import { games, type Game } from "../catalog";
+import { LayoutGrid, Play } from "lucide-react";
+import { categories, games, type Game } from "../catalog";
+import { categoryIcon } from "../lib/categoryIcons";
 import NavAccount from "../components/NavAccount";
 import { RiHomeSmile, RiSearchReicon } from "../components/ReIcons";
 import { inkFor } from "../components/FeatureCarousel";
 import "./home3.css";
 import "./games-globe.css";
+
+// categories that actually have games, with their counts (for the nav's categories menu)
+const navCategories = categories
+  .filter((c): c is Game["category"] => c !== "All")
+  .map((c) => ({ name: c, count: games.filter((g) => g.category === c).length }))
+  .filter((c) => c.count > 0);
+
+/** Icon-only "Categories" button with a dropdown of category pages. */
+function CategoryMenu() {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className={`gs-cats${open ? " is-open" : ""}`} ref={rootRef}>
+      <button
+        type="button"
+        className="gs-icon-btn"
+        aria-label="Categories"
+        title="Categories"
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <LayoutGrid size={21} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      {open ? (
+        <ul className="gs-cats-menu" aria-label="Categories">
+          {navCategories.map((c, i) => {
+            const Icon = categoryIcon[c.name];
+            return (
+              <li key={c.name} style={{ animationDelay: `${i * 25}ms` }}>
+                <Link to={`/category/${c.name.toLowerCase()}`} onClick={() => setOpen(false)}>
+                  <span className="gs-cats-icon" aria-hidden="true">
+                    <Icon size={16} />
+                  </span>
+                  <span className="gs-cats-name">{c.name}</span>
+                  <span className="gs-cats-count">{c.count}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
 /*
  * /games: every game as a circular card on a 3D glass globe.
@@ -379,11 +442,7 @@ export default function GamesGlobe() {
           <Link className="gs-home" to="/" aria-label="Home" title="Home">
             <RiHomeSmile size={22} aria-hidden="true" />
           </Link>
-          <div className="h3-menu h3-menu-end">
-            <Link to="/games" aria-current="page">
-              All games
-            </Link>
-          </div>
+          <CategoryMenu />
           <NavAccount />
         </div>
       </nav>

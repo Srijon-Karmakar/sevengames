@@ -1,5 +1,6 @@
 /* Carrom engine — seat-based world, physics, rules, snapshots.
    Pure TypeScript math; DOM/canvas lives in render.ts, CPU in cpu.ts. */
+import { BASE_STATS, massFor, maxSpeedFor, type StrikerStats } from "./stats";
 
 export type Seats = 2 | 4;
 export type SeatColor = "white" | "black";
@@ -13,6 +14,8 @@ export type Player = {
   name: string;
   kind: SeatKind;
   color: SeatColor;
+  /** striker stats this player shoots with (power -> top speed, weight -> mass) */
+  stats: StrikerStats;
 };
 
 export type Disc = {
@@ -75,7 +78,14 @@ export type World = {
   events: FxEvent[];
   shotCount: number;
   result: { winner: SeatColor } | null;
+  /** coins owed after a striker foul with nothing to return; paid from the next pots */
+  due: { white: number; black: number };
+  /** shots in a row with no coin or queen pocketed (stalemate guard) */
+  dry: number;
 };
+
+/** After this many shots in a row without a pot, the board is decided on coins left. */
+export const DRY_LIMIT = 40;
 
 /* ================= world constants (virtual board units, 1000 x 1000) ================= */
 
@@ -84,7 +94,7 @@ export const WALL = 28;
 export const PF_MIN = WALL;
 export const PF_MAX = SIZE - WALL;
 export const COIN_R = 19;
-export const STRIKER_R = 26;
+export const STRIKER_R = 30;
 const STRIKER_M = 1.7;
 const COIN_M = 1;
 export const POCKET_R = 34;
@@ -198,7 +208,7 @@ function makeCoin(kind: Kind, x: number, y: number): Disc {
 
 export type WorldConfig = {
   seats: Seats;
-  players: Array<{ name: string; kind: SeatKind }>;
+  players: Array<{ name: string; kind: SeatKind; stats?: StrikerStats }>;
 };
 
 export function makeWorld(cfg: WorldConfig): World {
@@ -208,6 +218,7 @@ export function makeWorld(cfg: WorldConfig): World {
     name: p.name,
     kind: p.kind,
     color: colorOfSeat(i, cfg.seats),
+    stats: p.stats ?? BASE_STATS,
   }));
 
   const striker: Disc = {
@@ -255,6 +266,8 @@ export function makeWorld(cfg: WorldConfig): World {
     events: [],
     shotCount: 0,
     result: null,
+    due: { white: 0, black: 0 },
+    dry: 0,
   };
   resetStriker(world, 0);
   return world;
@@ -291,15 +304,32 @@ function reviveQueen(world: World) {
   world.queen = { state: "board" };
 }
 
+/** Baseline circle rule: the striker must cover an end circle completely or not touch it at all. */
+const CIRCLE_R = 17;
+export function legalT(t: number) {
+  for (const c of [BASE_MIN, BASE_MAX]) {
+    const d = t - c;
+    const inner = STRIKER_R - CIRCLE_R; // fully covering
+    const outer = STRIKER_R + CIRCLE_R; // clear of it
+    if (Math.abs(d) > inner && Math.abs(d) < outer) {
+      const sign = d === 0 ? 1 : Math.sign(d);
+      // snap to whichever legal edge is nearer
+      return Math.abs(d) - inner < outer - Math.abs(d) ? c + sign * inner : c + sign * outer;
+    }
+  }
+  return t;
+}
+
 export function freeAlong(world: World, seat: number, t: number) {
   const bl = baselineFor(seat, world.seats);
   const blocked = (c: number) => {
+    if (legalT(c) !== c) return true;
     const p = strikerPos(seat, world.seats, c);
     return world.discs.some(
       (d) => d.alive && d.kind !== "striker" && dist(d, p) < d.r + STRIKER_R + 1,
     );
   };
-  const c0 = clamp(t, bl.min, bl.max);
+  const c0 = clamp(legalT(clamp(t, bl.min, bl.max)), bl.min, bl.max);
   if (!blocked(c0)) return c0;
   for (let off = 4; off <= 560; off += 4) {
     if (c0 - off >= bl.min && !blocked(c0 - off)) return c0 - off;
@@ -322,7 +352,7 @@ export function resetStriker(world: World, seat: number) {
 
 export function placeStriker(world: World, seat: number, t: number) {
   const bl = baselineFor(seat, world.seats);
-  world.strikerT[seat] = clamp(t, bl.min, bl.max);
+  world.strikerT[seat] = clamp(legalT(clamp(t, bl.min, bl.max)), bl.min, bl.max);
   if (world.turn !== seat) return;
   const c = freeAlong(world, seat, world.strikerT[seat]);
   const p = strikerPos(seat, world.seats, c);
@@ -546,7 +576,10 @@ export function shootStriker(world: World, dir: Vec, power: number) {
   const s = world.striker;
   if (!s.alive) return false;
   const d = norm(dir);
-  const sp = MIN_POWER_SPEED + clamp(power, 0.05, 1) * (MAX_POWER_SPEED - MIN_POWER_SPEED);
+  const stats = world.players[world.turn]?.stats ?? BASE_STATS;
+  const top = maxSpeedFor(stats.power);
+  const sp = MIN_POWER_SPEED + clamp(power, 0.05, 1) * (top - MIN_POWER_SPEED);
+  s.m = massFor(stats.weight);
   s.vx = d.x * sp;
   s.vy = d.y * sp;
   world.shot = { potted: [], strikerPotted: false, contact: false };
@@ -554,7 +587,7 @@ export function shootStriker(world: World, dir: Vec, power: number) {
   return true;
 }
 
-export type ShotResult = { extra: boolean; msg: string; over: boolean };
+export type ShotResult = { extra: boolean; msg: string; over: boolean; ownPots: number; foul: boolean };
 
 function aliveCoins(world: World, color: SeatColor) {
   return world.discs.filter((d) => d.alive && d.kind === color).length;
@@ -571,21 +604,29 @@ export function resolveShot(world: World): ShotResult {
   const queenPot = shot.potted.some((d) => d.kind === "queen");
   let extra = false;
   let msg = "";
+  let foul = false;
   const who = shooter.name;
 
-  if (shot.strikerPotted) {
-    msg = `${who} pocketed the striker — foul!`;
+  /** Penalty: return one of the shooter's pocketed coins, or owe it ("due") if there is none. */
+  const penalty = () => {
     const back = world.potted[own].pop();
     if (back) reviveAt(world, back);
+    else world.due[own] += 1;
+  };
+
+  if (shot.strikerPotted) {
+    foul = true;
+    msg = `Foul! ${who} sank the striker.`;
+    penalty();
     if (queenPot || (world.queen.state === "pending" && world.queen.seat === shooterSeat)) {
       reviveQueen(world);
-      msg += " Queen returned.";
+      msg += " Queen back.";
     }
   } else {
-    if (!shot.contact) msg = `${who} hit nothing — due! Turn passes.`;
-    else if (ownPots.length) msg = ownPots.length > 1 ? `${who} pocketed ${ownPots.length} coins!` : `${who} pocketed a coin!`;
-    else if (oppPots.length) msg = `${who} sank an opponent coin — it counts for them.`;
-    else msg = `${who} potted nothing.`;
+    if (!shot.contact) msg = `${who} missed. Turn passes.`;
+    else if (ownPots.length) msg = ownPots.length > 1 ? `${who} sank ${ownPots.length}!` : `${who} sank one!`;
+    else if (oppPots.length) msg = `${who} sank a rival coin.`;
+    else msg = `${who}: no pot.`;
 
     if (ownPots.length) extra = true;
 
@@ -599,7 +640,7 @@ export function resolveShot(world: World): ShotResult {
       } else {
         reviveQueen(world);
         extra = false;
-        msg += " Queen not covered — back to the centre.";
+        msg += " Queen uncovered, back to centre.";
       }
     } else if (queenPot) {
       if (ownPots.length) {
@@ -608,26 +649,60 @@ export function resolveShot(world: World): ShotResult {
       } else {
         world.queen = { state: "pending", seat: shooterSeat };
         extra = true;
-        msg += ` ${who} must cover the queen next shot!`;
+        msg += " Now cover the queen!";
       }
     }
   }
+
+  // Sinking the opponent's LAST coin while you still have your own is a foul: it comes back,
+  // plus a penalty coin of yours, and the turn passes.
+  if (aliveCoins(world, opp) === 0 && aliveCoins(world, own) > 0) {
+    const back = world.potted[opp].pop();
+    if (back) reviveAt(world, back);
+    penalty();
+    foul = true;
+    extra = false;
+    msg = `Foul! ${who} sank the last rival coin.`;
+  }
+
+  // Pay off any owed coins from this player's pots.
+  let paid = 0;
+  while (world.due[own] > 0 && world.potted[own].length > 0) {
+    const back = world.potted[own].pop();
+    if (back) reviveAt(world, back);
+    world.due[own] -= 1;
+    paid += 1;
+  }
+  if (paid) msg += " Due paid.";
 
   let over = false;
   const remOwn = aliveCoins(world, own);
   const remOpp = aliveCoins(world, opp);
 
+  // Stalemate guard: a long run with nothing pocketed (e.g. last coins pinned against the
+  // cushions behind the baselines) ends the board on coins left.
+  world.dry = shot.potted.length ? 0 : world.dry + 1;
+  if (world.dry >= DRY_LIMIT && remOwn > 0 && remOpp > 0) {
+    const winner: SeatColor =
+      remOwn !== remOpp
+        ? remOwn < remOpp
+          ? own
+          : opp
+        : world.queen.state === "owned"
+          ? world.queen.color
+          : opp;
+    world.result = { winner };
+    return { extra: false, msg: `No pots in ${DRY_LIMIT} shots. Board decided on coins left.`, over: true, ownPots: 0, foul };
+  }
+
   if (remOwn === 0 && remOpp === 0) {
     world.result = { winner: own };
-    over = true;
-  } else if (remOpp === 0) {
-    world.result = { winner: opp };
     over = true;
   } else if (remOwn === 0) {
     if (world.queen.state !== "owned") {
       const back = world.potted[own].pop();
       if (back) reviveAt(world, back);
-      msg += " The queen must be covered first — coin returned.";
+      msg += " Cover the queen first.";
     } else {
       world.result = { winner: own };
       over = true;
@@ -640,7 +715,19 @@ export function resolveShot(world: World): ShotResult {
     resetStriker(world, world.turn);
   }
 
-  return { extra, msg, over };
+  return { extra, msg, over, ownPots: foul ? 0 : ownPots.length, foul };
+}
+
+/** Points for a finished board (standard carrom scoring): the winner scores one per coin the
+ *  loser still has (on the board or owed), plus 3 for the queen if the winner covered it and
+ *  their match total is still under 22. */
+export function boardPoints(world: World, winnerTotal: number) {
+  const winner = world.result?.winner;
+  if (!winner) return 0;
+  const loser: SeatColor = winner === "white" ? "black" : "white";
+  const left = aliveCoins(world, loser) + world.due[loser];
+  const queen = world.queen.state === "owned" && world.queen.color === winner && winnerTotal < 22 ? 3 : 0;
+  return Math.max(1, left + queen);
 }
 
 /** The player on turn ran out of time: no shot, the turn passes (a pending queen goes back). */
@@ -675,6 +762,8 @@ export type Snap = {
   discs: Array<[number, number, number, number, 0 | 1]>;
   shotCount: number;
   winner: SeatColor | null;
+  /** owed coins (white, black) */
+  due?: [number, number];
 };
 
 export function snapshotOf(world: World): Snap {
@@ -695,6 +784,7 @@ export function snapshotOf(world: World): Snap {
       .map((d) => [d.id, KIND_CODE[d.kind], Math.round(d.x * 10) / 10, Math.round(d.y * 10) / 10, 1] as [number, number, number, number, 0 | 1]),
     shotCount: world.shotCount,
     winner: world.result ? world.result.winner : null,
+    due: [world.due.white, world.due.black],
   };
 }
 
@@ -712,7 +802,7 @@ export function applySnapshot(world: World, snap: Snap): World {
       vx: 0,
       vy: 0,
       r: kind === "striker" ? STRIKER_R : COIN_R,
-      m: kind === "striker" ? STRIKER_M : COIN_M,
+      m: kind === "striker" ? massFor((world.players[snap.turn]?.stats ?? BASE_STATS).weight) : COIN_M,
       alive: true,
       a: world.discs.find((o) => o.id === id)?.a ?? 0,
       w: 0,
@@ -745,6 +835,8 @@ export function applySnapshot(world: World, snap: Snap): World {
   world.queenDisc = queenDisc;
   world.shotCount = snap.shotCount;
   world.result = snap.winner ? { winner: snap.winner } : null;
+  world.due = { white: snap.due?.[0] ?? 0, black: snap.due?.[1] ?? 0 };
+  world.dry = 0;
   world.sinks = [];
   world.events = [];
   return world;

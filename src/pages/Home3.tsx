@@ -263,7 +263,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
           // landing: white pill buttons (tokens, "Play now" → game globe) beside the account button
           <div className="h3-nav-end h3-nav-pills">
             <TokenPill variant="solid" />
-            <Link className="h3-pill-btn h3-play-btn" to="/games">
+            <Link className="h3-pill-btn h3-play-btn" to="/games" aria-label="Play now" title="Play now">
               <span className="h3-play-icon" aria-hidden="true">
                 <Play size={12} fill="currentColor" strokeWidth={0} />
               </span>

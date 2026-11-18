@@ -2,12 +2,18 @@
    Every disc is pre-rendered once into a small sprite (per skin, per size), then drawn rotated
    each frame — cheap enough for 20 spinning discs at 60 fps on a phone. */
 
-export type Unlock = { level: number } | { pro: true };
+import type { StrikerStats } from "./stats";
+
+/** How an item is obtained: bought with tokens; `minLevel` must be reached first.
+ *  `pro` items are included with Senevon Pro. Prices match supabase/carrom.sql. */
+export type Shop = { price: number; minLevel: number; pro?: boolean };
 
 export type StrikerSkin = {
   id: string;
   name: string;
-  unlock: Unlock;
+  shop: Shop;
+  /** starting stats before upgrades (1..10) */
+  base: StrikerStats;
   /** face gradient (centre → edge), rim colour, engraved ring colour, optional emblem */
   face: [string, string];
   rim: string;
@@ -20,7 +26,7 @@ export type StrikerSkin = {
 export type CoinSet = {
   id: string;
   name: string;
-  unlock: Unlock;
+  shop: Shop;
   light: { face: [string, string]; rim: string; mark: string };
   dark: { face: [string, string]; rim: string; mark: string };
   queen: { face: [string, string]; rim: string; mark: string };
@@ -29,21 +35,21 @@ export type CoinSet = {
 };
 
 export const STRIKERS: StrikerSkin[] = [
-  { id: "classic", name: "Classic Ivory", unlock: { level: 1 }, face: ["#ffffff", "#cfd6de"], rim: "#8d98a6", ring: "#9aa6b4" },
-  { id: "maple", name: "Maple Wood", unlock: { level: 3 }, face: ["#f1c98d", "#b07a3f"], rim: "#7a4a1d", ring: "#8a5a2b", emblem: "swirl" },
-  { id: "ocean", name: "Ocean Blue", unlock: { level: 5 }, face: ["#9fd8ff", "#2a73d8"], rim: "#163f86", ring: "#d9f0ff", emblem: "star" },
-  { id: "carbon", name: "Carbon Fibre", unlock: { level: 8 }, face: ["#4b4f57", "#15171b"], rim: "#000000", ring: "#9aa3b0", emblem: "bolt" },
-  { id: "neon", name: "Neon Pulse", unlock: { level: 12 }, face: ["#1b1030", "#090511"], rim: "#ff3fd8", ring: "#3ff7ff", emblem: "bolt", glow: "rgba(255,63,216,1)" },
-  { id: "gold", name: "Royal Gold", unlock: { level: 16 }, face: ["#fff2b8", "#c99a1d"], rim: "#8a6408", ring: "#fff6d2", emblem: "crown" },
-  { id: "galaxy", name: "Galaxy", unlock: { pro: true }, face: ["#7c5cff", "#120a3a"], rim: "#c6b8ff", ring: "#ffffff", emblem: "star", glow: "rgba(140,110,255,1)" },
-  { id: "lava", name: "Lava Core", unlock: { pro: true }, face: ["#ffd36b", "#c2260d"], rim: "#3a0c04", ring: "#ffb347", emblem: "flame", glow: "rgba(255,90,20,1)" },
+  { id: "classic", name: "Classic Ivory", shop: { price: 0, minLevel: 1 }, base: { power: 1, weight: 1, aim: 1 }, face: ["#ffffff", "#cfd6de"], rim: "#8d98a6", ring: "#9aa6b4" },
+  { id: "maple", name: "Maple Wood", shop: { price: 250, minLevel: 1 }, base: { power: 2, weight: 2, aim: 3 }, face: ["#f1c98d", "#b07a3f"], rim: "#7a4a1d", ring: "#8a5a2b", emblem: "swirl" },
+  { id: "ocean", name: "Ocean Blue", shop: { price: 400, minLevel: 1 }, base: { power: 2, weight: 1, aim: 4 }, face: ["#9fd8ff", "#2a73d8"], rim: "#163f86", ring: "#d9f0ff", emblem: "star" },
+  { id: "carbon", name: "Carbon Fibre", shop: { price: 600, minLevel: 3 }, base: { power: 2, weight: 4, aim: 2 }, face: ["#4b4f57", "#15171b"], rim: "#000000", ring: "#9aa3b0", emblem: "bolt" },
+  { id: "neon", name: "Neon Pulse", shop: { price: 900, minLevel: 5 }, base: { power: 4, weight: 2, aim: 2 }, face: ["#1b1030", "#090511"], rim: "#ff3fd8", ring: "#3ff7ff", emblem: "bolt", glow: "rgba(255,63,216,1)" },
+  { id: "gold", name: "Royal Gold", shop: { price: 1400, minLevel: 8 }, base: { power: 3, weight: 3, aim: 3 }, face: ["#fff2b8", "#c99a1d"], rim: "#8a6408", ring: "#fff6d2", emblem: "crown" },
+  { id: "galaxy", name: "Galaxy", shop: { price: 2500, minLevel: 12, pro: true }, base: { power: 4, weight: 3, aim: 4 }, face: ["#7c5cff", "#120a3a"], rim: "#c6b8ff", ring: "#ffffff", emblem: "star", glow: "rgba(140,110,255,1)" },
+  { id: "lava", name: "Lava Core", shop: { price: 3000, minLevel: 15, pro: true }, base: { power: 5, weight: 4, aim: 2 }, face: ["#ffd36b", "#c2260d"], rim: "#3a0c04", ring: "#ffb347", emblem: "flame", glow: "rgba(255,90,20,1)" },
 ];
 
 export const COIN_SETS: CoinSet[] = [
   {
     id: "classic",
     name: "Classic Wood",
-    unlock: { level: 1 },
+    shop: { price: 0, minLevel: 1 },
     light: { face: ["#fbf7ec", "#d6cab0"], rim: "#b3a685", mark: "rgba(0,0,0,0.16)" },
     dark: { face: ["#4a4a4f", "#17171a"], rim: "#000000", mark: "rgba(255,255,255,0.1)" },
     queen: { face: ["#e05a51", "#8e241e"], rim: "#6e1b16", mark: "rgba(255,235,230,0.45)" },
@@ -52,7 +58,7 @@ export const COIN_SETS: CoinSet[] = [
   {
     id: "marble",
     name: "Marble",
-    unlock: { level: 4 },
+    shop: { price: 200, minLevel: 1 },
     light: { face: ["#ffffff", "#dfe3e8"], rim: "#a9b1bb", mark: "rgba(120,130,145,0.35)" },
     dark: { face: ["#3a3f46", "#101215"], rim: "#000000", mark: "rgba(200,210,225,0.25)" },
     queen: { face: ["#ff7aa0", "#b81d4c"], rim: "#7a0f30", mark: "rgba(255,230,240,0.4)" },
@@ -61,7 +67,7 @@ export const COIN_SETS: CoinSet[] = [
   {
     id: "pearl",
     name: "Pearl & Onyx",
-    unlock: { level: 7 },
+    shop: { price: 350, minLevel: 1 },
     light: { face: ["#fffaf3", "#e8dccb"], rim: "#cbb89f", mark: "rgba(255,190,220,0.35)" },
     dark: { face: ["#2b2b30", "#050506"], rim: "#000000", mark: "rgba(120,140,255,0.3)" },
     queen: { face: ["#ffe08a", "#c9901a"], rim: "#8a5f08", mark: "rgba(255,255,255,0.45)" },
@@ -70,7 +76,7 @@ export const COIN_SETS: CoinSet[] = [
   {
     id: "jade",
     name: "Jade & Ruby",
-    unlock: { level: 10 },
+    shop: { price: 550, minLevel: 3 },
     light: { face: ["#b9f5d0", "#2fa36a"], rim: "#16653d", mark: "rgba(255,255,255,0.3)" },
     dark: { face: ["#ff8a8a", "#a3121f"], rim: "#5c050c", mark: "rgba(255,255,255,0.25)" },
     queen: { face: ["#fff1a8", "#d6a417"], rim: "#8a6408", mark: "rgba(255,255,255,0.5)" },
@@ -79,7 +85,7 @@ export const COIN_SETS: CoinSet[] = [
   {
     id: "neon",
     name: "Neon Night",
-    unlock: { level: 14 },
+    shop: { price: 800, minLevel: 5 },
     light: { face: ["#c7fbff", "#21c6e8"], rim: "#0b6e85", mark: "rgba(255,255,255,0.5)" },
     dark: { face: ["#ffb3f2", "#c219a8"], rim: "#5e0752", mark: "rgba(255,255,255,0.45)" },
     queen: { face: ["#fff36b", "#e0a800"], rim: "#7a5a00", mark: "rgba(255,255,255,0.55)" },
@@ -89,7 +95,7 @@ export const COIN_SETS: CoinSet[] = [
   {
     id: "royal",
     name: "Gold & Silver",
-    unlock: { pro: true },
+    shop: { price: 1800, minLevel: 10, pro: true },
     light: { face: ["#ffffff", "#aeb6c1"], rim: "#6c7682", mark: "rgba(255,255,255,0.6)" },
     dark: { face: ["#fff0b0", "#b98a12"], rim: "#6e4f05", mark: "rgba(255,255,255,0.55)" },
     queen: { face: ["#ff7a7a", "#b3001b"], rim: "#5c0010", mark: "rgba(255,230,230,0.55)" },
@@ -98,7 +104,7 @@ export const COIN_SETS: CoinSet[] = [
   {
     id: "crystal",
     name: "Crystal",
-    unlock: { pro: true },
+    shop: { price: 2200, minLevel: 12, pro: true },
     light: { face: ["#f2fbff", "#9fd6ff"], rim: "#5aa2d6", mark: "rgba(255,255,255,0.7)" },
     dark: { face: ["#c9b8ff", "#5a2ec2"], rim: "#2c1170", mark: "rgba(255,255,255,0.6)" },
     queen: { face: ["#ffd1e6", "#ff3d8b"], rim: "#8a0b45", mark: "rgba(255,255,255,0.65)" },
@@ -110,11 +116,64 @@ export const COIN_SETS: CoinSet[] = [
 export const strikerById = (id: string) => STRIKERS.find((s) => s.id === id) ?? STRIKERS[0];
 export const coinSetById = (id: string) => COIN_SETS.find((c) => c.id === id) ?? COIN_SETS[0];
 
-export function isUnlocked(u: Unlock, level: number, pro: boolean) {
-  return "pro" in u ? pro : pro || level >= u.level;
-}
+/* ---------------- boards ---------------- */
 
-export const unlockLabel = (u: Unlock) => ("pro" in u ? "PRO" : `Level ${u.level}`);
+export type BoardTheme = {
+  id: string;
+  name: string;
+  shop: Shop;
+  /** frame wood, frame grain, playfield top/bottom, playfield grain, ink, pocket ring (light/dark) */
+  frame: string;
+  frameGrain: string;
+  field: [string, string];
+  fieldGrain: string;
+  ink: string;
+  brass: [string, string, string];
+  /** optional neon glow on the markings */
+  glow?: string;
+};
+
+export const BOARDS: BoardTheme[] = [
+  {
+    id: "classic",
+    name: "Classic Maple",
+    shop: { price: 0, minLevel: 1 },
+    frame: "#4a2614",
+    frameGrain: "#1c0c04",
+    field: ["#f6e3b8", "#ead09a"],
+    fieldGrain: "#9c6a2e",
+    ink: "#9e2b25",
+    brass: ["#f7d98a", "#a77a26", "#5c3f0c"],
+  },
+  {
+    id: "tournament",
+    name: "Tournament",
+    shop: { price: 500, minLevel: 1 },
+    frame: "#1f120b",
+    frameGrain: "#000000",
+    field: ["#e8c98e", "#cfa762"],
+    fieldGrain: "#7a4a18",
+    ink: "#1d1d1f",
+    brass: ["#e9eef4", "#9aa6b4", "#4b5563"],
+  },
+  {
+    id: "midnight",
+    name: "Midnight Neon",
+    shop: { price: 1200, minLevel: 6 },
+    frame: "#14121f",
+    frameGrain: "#000000",
+    field: ["#2a2740", "#1b1930"],
+    fieldGrain: "#4b4570",
+    ink: "#ff4fd8",
+    brass: ["#7df9ff", "#2aa8c4", "#0d4b5c"],
+    glow: "rgba(255,79,216,0.55)",
+  },
+];
+
+export const boardById = (id: string) => BOARDS.find((b) => b.id === id) ?? BOARDS[0];
+
+export type ShopKind = "striker" | "coins" | "board";
+export const itemKey = (kind: ShopKind, id: string) => `${kind}:${id}`;
 
 /* ---------------- sprite rendering ---------------- */
 

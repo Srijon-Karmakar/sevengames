@@ -1,11 +1,14 @@
-/* Carrom progression: XP → level, selected striker / coin set, and Pro status.
-   Guests keep progress on this device; signed-in players also save it to their account
-   (Supabase auth metadata) so it follows them. Pro status comes from the `pro_members` table,
-   which only the admin panel can write (see supabase/pro.sql). */
-import { useCallback, useEffect, useState } from "react";
+/* Carrom progression: XP → level, owned + equipped items (striker, coin set, board), striker upgrades.
+
+   Signed-in players: everything lives on the server (supabase/carrom.sql) and changes only through
+   its RPCs, which charge tokens and check levels. Guests play with the free items and keep their XP
+   on this device. */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../../supabase";
-import { COIN_SETS, STRIKERS, isUnlocked, type CoinSet, type StrikerSkin } from "./skins";
+import { useTokens } from "../../lib/tokens";
+import { BOARDS, COIN_SETS, STRIKERS, itemKey, type BoardTheme, type CoinSet, type ShopKind, type StrikerSkin } from "./skins";
+import { effectiveStats, type StatKey, type StrikerStats } from "./stats";
 
 export const MAX_LEVEL = 30;
 /** Total XP needed to reach `level` (level 1 = 0 XP): 100, 300, 600, 1000 … */
@@ -16,102 +19,199 @@ export function levelForXp(xp: number) {
   return lv;
 }
 
-export const XP = { coin: 10, queen: 25, win: 100, loss: 40 } as const;
+export const XP = { coin: 10, queen: 25, win: 100, loss: 40, combo: 15 } as const;
 
-export type CarromProgress = { xp: number; striker: string; coins: string };
-const DEFAULT: CarromProgress = { xp: 0, striker: "classic", coins: "classic" };
+/** XP for one finished match, from the local player's point of view. `combos` = extra coins sunk
+ *  in multi-pot shots plus pots on consecutive shots. */
+export function matchXp(coins: number, queen: boolean, won: boolean, combos = 0) {
+  return coins * XP.coin + (queen ? XP.queen : 0) + (won ? XP.win : XP.loss) + combos * XP.combo;
+}
+
+type ServerState = {
+  xp: number;
+  level: number;
+  striker: string;
+  coins: string;
+  board: string;
+  pro: boolean;
+  free: boolean;
+  owned: string[];
+  upgrades: Record<string, Partial<StrikerStats>>;
+};
+
+type GuestState = { xp: number; striker: string; coins: string; board: string };
+const GUEST_DEFAULT: GuestState = { xp: 0, striker: "classic", coins: "classic", board: "classic" };
 const LOCAL_KEY = "senevon:carrom";
 
-function readLocal(): CarromProgress {
+function readGuest(): GuestState {
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
-    if (raw) return { ...DEFAULT, ...(JSON.parse(raw) as Partial<CarromProgress>) };
+    if (raw) {
+      const g = JSON.parse(raw) as Partial<GuestState>;
+      return { ...GUEST_DEFAULT, xp: Math.max(0, Number(g.xp) || 0) };
+    }
   } catch {
     /* private mode */
   }
-  return { ...DEFAULT };
+  return { ...GUEST_DEFAULT };
 }
-function writeLocal(p: CarromProgress) {
+function writeGuest(g: GuestState) {
   try {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(p));
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(g));
   } catch {
     /* ignore */
   }
 }
 
-/** XP for one finished match, from the local player's point of view. */
-export function matchXp(coins: number, queen: boolean, won: boolean) {
-  return coins * XP.coin + (queen ? XP.queen : 0) + (won ? XP.win : XP.loss);
+/** Friendly text for the carrom RPC errors. */
+export function carromErrorText(err: unknown) {
+  const msg = (err as { message?: string })?.message ?? String(err);
+  if (msg.includes("insufficient_tokens")) return "Not enough tokens.";
+  if (msg.includes("level_required")) return "Reach the required level first.";
+  if (msg.includes("max_level")) return "That stat is already maxed.";
+  if (msg.includes("not_owned")) return "Buy this item first.";
+  if (msg.includes("not_signed_in")) return "Sign in to use the shop.";
+  if (msg.includes("Could not find the function")) return "The carrom shop isn't set up yet (run supabase/carrom.sql).";
+  return "Something went wrong. Please try again.";
 }
 
 export function useCarromProgress(user: User | null) {
-  const [progress, setProgress] = useState<CarromProgress>(readLocal);
-  const [pro, setPro] = useState(false);
+  const { refresh: refreshTokens } = useTokens();
+  const [guest, setGuest] = useState<GuestState>(readGuest);
+  const [server, setServer] = useState<ServerState | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  // Merge account progress (keep the higher XP; account choices win) once signed in.
-  useEffect(() => {
-    if (!user) return;
-    const remote = (user.user_metadata?.carrom ?? null) as Partial<CarromProgress> | null;
-    if (!remote) return;
-    setProgress((local) => {
-      const merged = { ...local, ...remote, xp: Math.max(local.xp, remote.xp ?? 0) };
-      writeLocal(merged);
-      return merged;
-    });
-  }, [user]);
+  const rpc = useCallback(async (fn: string, args?: Record<string, unknown>) => {
+    if (!supabase) throw new Error("not_configured");
+    const { data, error } = await supabase.rpc(fn, args);
+    if (error) throw new Error(error.message);
+    return data as ServerState;
+  }, []);
 
-  // Pro status (read-only for players; RLS lets each user read only their own row).
   useEffect(() => {
-    let cancelled = false;
     if (!user || !supabase) {
-      setPro(false);
+      setServer(null);
       return;
     }
-    void supabase
-      .from("pro_members")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!cancelled) setPro(!error && Boolean(data));
-      });
+    let alive = true;
+    rpc("carrom_state").then(
+      (s) => {
+        if (alive) {
+          setServer(s);
+          setServerError(null);
+        }
+      },
+      (err) => alive && setServerError(carromErrorText(err)),
+    );
     return () => {
-      cancelled = true;
+      alive = false;
     };
-  }, [user]);
+  }, [user, rpc]);
 
-  const save = useCallback(
-    (next: CarromProgress) => {
-      setProgress(next);
-      writeLocal(next);
-      if (user && supabase) void supabase.auth.updateUser({ data: { carrom: next } });
+  const signedIn = Boolean(user && server);
+  const pro = server?.pro ?? false;
+  const xp = server ? server.xp : guest.xp;
+  const level = levelForXp(xp);
+
+  const owns = useCallback(
+    (kind: ShopKind, id: string) => {
+      const list = kind === "striker" ? STRIKERS : kind === "coins" ? COIN_SETS : BOARDS;
+      const item = list.find((x) => x.id === id);
+      if (!item) return false;
+      if (item.shop.price === 0) return true;
+      if (!server) return false;
+      return server.pro || server.owned.includes(itemKey(kind, id));
     },
-    [user],
+    [server],
   );
 
-  const level = levelForXp(progress.xp);
-  const striker: StrikerSkin =
-    STRIKERS.find((s) => s.id === progress.striker && isUnlocked(s.unlock, level, pro)) ?? STRIKERS[0];
-  const coinSet: CoinSet =
-    COIN_SETS.find((c) => c.id === progress.coins && isUnlocked(c.unlock, level, pro)) ?? COIN_SETS[0];
+  const pick = <T extends { id: string }>(list: T[], kind: ShopKind, id: string) =>
+    list.find((x) => x.id === id && owns(kind, x.id)) ?? list[0];
 
-  /** Adds XP; returns the levels gained and any items newly unlocked by them. */
+  const striker: StrikerSkin = pick(STRIKERS, "striker", server?.striker ?? guest.striker);
+  const coinSet: CoinSet = pick(COIN_SETS, "coins", server?.coins ?? guest.coins);
+  const board: BoardTheme = pick(BOARDS, "board", server?.board ?? guest.board);
+
+  const statsFor = useCallback(
+    (s: StrikerSkin): StrikerStats => effectiveStats(s.base, server?.upgrades?.[s.id]),
+    [server],
+  );
+  const strikerStats = useMemo(() => statsFor(striker), [statsFor, striker]);
+
+  /** Adds match XP; returns the levels before and after. */
   const addXp = useCallback(
     (amount: number) => {
-      const before = levelForXp(progress.xp);
-      const next = { ...progress, xp: progress.xp + Math.max(0, Math.round(amount)) };
-      save(next);
-      const after = levelForXp(next.xp);
-      const unlocked = [
-        ...STRIKERS.filter((s) => "level" in s.unlock && s.unlock.level > before && s.unlock.level <= after).map((s) => s.name + " striker"),
-        ...COIN_SETS.filter((c) => "level" in c.unlock && c.unlock.level > before && c.unlock.level <= after).map((c) => c.name + " coins"),
-      ];
-      return { before, after, unlocked };
+      const gain = Math.max(0, Math.round(amount));
+      const before = level;
+      if (server) {
+        const after = levelForXp(server.xp + gain);
+        setServer({ ...server, xp: server.xp + gain }); // optimistic; the server has the final say
+        void rpc("carrom_award_xp", { p_amount: gain }).then(setServer, () => {});
+        return { before, after };
+      }
+      const next = { ...guest, xp: guest.xp + gain };
+      setGuest(next);
+      writeGuest(next);
+      return { before, after: levelForXp(next.xp) };
     },
-    [progress, save],
+    [level, server, guest, rpc],
   );
 
-  const select = useCallback((patch: Partial<Pick<CarromProgress, "striker" | "coins">>) => save({ ...progress, ...patch }), [progress, save]);
+  const buy = useCallback(
+    async (kind: ShopKind, id: string) => {
+      setServer(await rpc("carrom_buy", { p_kind: kind, p_item: id }));
+      void refreshTokens();
+    },
+    [rpc, refreshTokens],
+  );
 
-  return { progress, level, pro, striker, coinSet, addXp, select };
+  const upgrade = useCallback(
+    async (strikerId: string, stat: StatKey) => {
+      setServer(await rpc("carrom_upgrade", { p_striker: strikerId, p_stat: stat }));
+      void refreshTokens();
+    },
+    [rpc, refreshTokens],
+  );
+
+  const select = useCallback(
+    async (kind: ShopKind, id: string) => {
+      if (!server) {
+        // guests can only use the free items
+        if (!owns(kind, id)) return;
+        const next = { ...guest, [kind === "striker" ? "striker" : kind]: id } as GuestState;
+        setGuest(next);
+        writeGuest(next);
+        return;
+      }
+      // optimistic equip, then confirm
+      const key = kind === "striker" ? "striker" : kind;
+      setServer({ ...server, [key]: id });
+      try {
+        setServer(await rpc("carrom_select", { p_kind: kind, p_item: id }));
+      } catch {
+        setServer(server);
+      }
+    },
+    [server, guest, owns, rpc],
+  );
+
+  return {
+    xp,
+    level,
+    pro,
+    free: server?.free ?? false,
+    signedIn,
+    serverError,
+    striker,
+    coinSet,
+    board,
+    strikerStats,
+    statsFor,
+    upgradesFor: (id: string) => server?.upgrades?.[id] ?? {},
+    owns,
+    addXp,
+    buy,
+    upgrade,
+    select,
+  };
 }

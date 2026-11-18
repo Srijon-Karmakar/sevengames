@@ -622,3 +622,103 @@
     transform: none;
   }
 }
+
+/* ---------- Landing pills: phones (last, so it beats the desktop sizes above) ---------- */
+@media (max-width: 600px) {
+  .h3-nav .h3-nav-end.h3-nav-pills {
+    gap: 6px;
+  }
+
+  /* Play now → round play button; the label stays for screen readers */
+  .h3 .h3-nav .h3-play-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .h3 .h3-nav .h3-play-btn::before {
+    clip-path: circle(0% at 50% 50%);
+  }
+
+  .h3 .h3-nav .h3-play-btn:focus-visible::before {
+    clip-path: circle(150% at 50% 50%);
+  }
+
+  .h3-play-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .h3-play-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* token pill: tighter */
+  .h3 .h3-nav .tk-pill.tk-pill-solid {
+    height: 34px;
+    gap: 5px;
+    padding: 0 10px 0 6px;
+    font-size: 12.5px;
+  }
+
+  .h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin {
+    width: 22px;
+    height: 22px;
+    margin-left: 0;
+  }
+
+  .h3 .h3-nav .tk-pill.tk-pill-solid .tk-pill-coin svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@media (max-width: 600px) and (hover: hover) {
+  .h3 .h3-nav .h3-play-btn:hover::before {
+    clip-path: circle(150% at 50% 50%);
+  }
+}
+
+/* ---------- Landing pills: one shared height for tokens, Play now and the avatar ----------
+   The avatar's 2px white ring sits outside it, so the circle is 4px smaller to match visually. */
+.h3-nav .h3-nav-end.h3-nav-pills {
+  --pill-h: 38px;
+  align-items: center;
+}
+
+.h3 .h3-nav .h3-nav-pills .h3-pill-btn,
+.h3 .h3-nav .h3-nav-pills .tk-pill.tk-pill-solid {
+  height: var(--pill-h);
+}
+
+.h3 .h3-nav .h3-nav-pills .h3-play-icon {
+  width: calc(var(--pill-h) - 10px);
+  height: calc(var(--pill-h) - 10px);
+}
+
+.h3 .h3-nav .h3-nav-pills .h3-account {
+  height: calc(var(--pill-h) - 4px);
+  min-width: calc(var(--pill-h) - 4px);
+}
+
+.h3 .h3-nav .h3-nav-pills .h3-account-icon {
+  width: calc(var(--pill-h) - 4px);
+  height: calc(var(--pill-h) - 4px);
+}
+
+@media (max-width: 600px) {
+  .h3-nav .h3-nav-end.h3-nav-pills {
+    --pill-h: 34px;
+  }
+
+  .h3 .h3-nav .h3-nav-pills .h3-play-btn {
+    width: var(--pill-h);
+  }
+}

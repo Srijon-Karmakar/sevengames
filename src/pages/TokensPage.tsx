@@ -31,6 +31,7 @@ const REASON: Record<string, { label: string; Icon: typeof Coins }> = {
   admin: { label: "Adjustment", Icon: Sparkles },
   guest: { label: "Guest tokens carried over", Icon: Gift },
   purchase: { label: "Bought a token pack", Icon: ShoppingBag },
+  carrom: { label: "Carrom shop", Icon: Gamepad2 },
 };
 
 const PACK_META: Record<string, { name: string; flag?: string; coins: number }> = {
@@ -39,6 +40,15 @@ const PACK_META: Record<string, { name: string; flag?: string; coins: number }> 
   pro: { name: "Pro", coins: 3 },
   legend: { name: "Legend", flag: "Best value", coins: 4 },
 };
+
+/** "striker:neon" → "Neon striker", "upgrade:gold:power:7" → "Gold power → Lv 7" */
+function carromRefLabel(ref: string) {
+  const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+  const p = ref.split(":");
+  if (p[0] === "upgrade" && p.length === 4) return `${cap(p[1])} ${p[2]} → Lv ${p[3]}`;
+  if (p.length === 2) return `${cap(p[1])} ${p[0] === "coins" ? "coin set" : p[0]}`;
+  return ref;
+}
 
 type Checkout = { kind: "plan"; plan: "monthly" | "yearly" } | { kind: "pack"; pack: TokenPack };
 
@@ -436,6 +446,7 @@ export default function TokensPage() {
               const detail =
                 (r.reason === "play" && r.ref ? (getGame(r.ref)?.title ?? r.ref) : null) ??
                 (r.reason === "purchase" && r.ref ? (PACK_META[r.ref]?.name ?? r.ref) + " pack" : null) ??
+                (r.reason === "carrom" && r.ref ? carromRefLabel(r.ref) : null) ??
                 (r.reason === "admin" && r.ref ? r.ref : null);
               return (
                 <li key={r.id}>

@@ -1,8 +1,25 @@
-/* Carrom locker: pick a striker and a coin set. Items unlock by level, or all at once with Pro. */
+/* Carrom locker + shop: strikers (with stat upgrades), coin sets and boards, bought with tokens.
+   Top items and high upgrade levels also need a minimum player level. Pro owns every item. */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { COIN_SETS, STRIKERS, coinSprite, isUnlocked, lightingSprite, strikerSprite, unlockLabel, type CoinSet, type StrikerSkin } from "./skins";
-import { MAX_LEVEL, xpForLevel, type useCarromProgress } from "./progress";
+import { useTokens } from "../../lib/tokens";
+import { formatTokens } from "../../lib/currency";
+import {
+  BOARDS,
+  COIN_SETS,
+  STRIKERS,
+  coinSprite,
+  lightingSprite,
+  strikerSprite,
+  type BoardTheme,
+  type CoinSet,
+  type Shop,
+  type ShopKind,
+  type StrikerSkin,
+} from "./skins";
+import { MAX_LEVEL, carromErrorText, xpForLevel, type useCarromProgress } from "./progress";
+import { STATS, STAT_MAX, tierOf, upgradeCost, upgradeGate, type StatKey } from "./stats";
+import { carromAudio } from "./audio";
 
 type Prog = ReturnType<typeof useCarromProgress>;
 
@@ -27,7 +44,7 @@ export function LevelBar({ level, xp, pro, compact = false }: { level: number; x
   );
 }
 
-/** Small live preview of a disc sprite (drawn on a canvas, so it matches the game exactly). */
+/** Live preview of a disc sprite (drawn on a canvas, so it matches the game exactly). */
 function DiscPreview({ draw, size = 64, spin = false }: { draw: (px: number) => HTMLCanvasElement; size?: number; spin?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -59,25 +76,145 @@ function DiscPreview({ draw, size = 64, spin = false }: { draw: (px: number) => 
   return <canvas ref={ref} style={{ width: size, height: size }} aria-hidden="true" />;
 }
 
-export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; signedIn: boolean; onBack: () => void }) {
-  const [tab, setTab] = useState<"striker" | "coins">("striker");
-  const { level, pro } = prog;
-
-  const item = (unlocked: boolean, selected: boolean, label: string, lock: string, preview: React.ReactNode, onPick: () => void, key: string) => (
-    <button
-      key={key}
-      type="button"
-      className={`carrom-item${selected ? " is-on" : ""}${unlocked ? "" : " is-locked"}`}
-      onClick={unlocked ? onPick : undefined}
-      aria-pressed={selected}
-      aria-disabled={!unlocked}
-      title={unlocked ? label : `${label} — unlocks at ${lock}`}
+function BoardSwatch({ b }: { b: BoardTheme }) {
+  return (
+    <span
+      className="carrom-board-swatch"
+      style={
+        {
+          "--frame": b.frame,
+          "--f1": b.field[0],
+          "--f2": b.field[1],
+          "--ink": b.ink,
+          "--brass": b.brass[1],
+          "--glow": b.glow ?? "transparent",
+        } as React.CSSProperties
+      }
+      aria-hidden="true"
     >
-      <span className="carrom-item-art">{preview}</span>
-      <span className="carrom-item-name">{label}</span>
-      {selected ? <span className="carrom-item-tag on">Equipped</span> : unlocked ? <span className="carrom-item-tag">Use</span> : <span className={`carrom-item-tag lock${lock === "PRO" ? " pro" : ""}`}>🔒 {lock}</span>}
+      <i />
+    </span>
+  );
+}
+
+/** A button that asks for a second tap before spending tokens. */
+function SpendButton({
+  cost,
+  label,
+  disabled,
+  onConfirm,
+  className = "primary-btn",
+}: {
+  cost: number;
+  label: string;
+  disabled?: boolean;
+  onConfirm: () => void;
+  className?: string;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const id = window.setTimeout(() => setArmed(false), 3500);
+    return () => window.clearTimeout(id);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      className={`${className}${armed ? " is-armed" : ""}`}
+      disabled={disabled}
+      onClick={() => {
+        if (cost === 0 || armed) {
+          setArmed(false);
+          onConfirm();
+        } else setArmed(true);
+      }}
+    >
+      {armed ? `Confirm · ${formatTokens(cost)} tokens` : label}
     </button>
   );
+}
+
+export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; signedIn: boolean; onBack: () => void }) {
+  const [tab, setTab] = useState<ShopKind>("striker");
+  const [focus, setFocus] = useState<string>(prog.striker.id);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+  const { wallet } = useTokens();
+  const { level, pro, free } = prog;
+  const balance = wallet?.unlimited ? Infinity : (wallet?.balance ?? 0);
+
+  async function act(fn: () => Promise<void>, ok: string, sound = true) {
+    setBusy(true);
+    setNote(null);
+    try {
+      await fn();
+      if (sound) {
+        carromAudio.unlock();
+        carromAudio.upgrade();
+      }
+      setNote({ text: ok, ok: true });
+    } catch (err) {
+      setNote({ text: carromErrorText(err), ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** What the main button for an item should do. */
+  const stateOf = (kind: ShopKind, id: string, shop: Shop, equipped: boolean) => {
+    if (equipped) return { kind: "equipped" as const };
+    if (prog.owns(kind, id)) return { kind: "use" as const };
+    if (!signedIn) return { kind: "signin" as const };
+    if (level < shop.minLevel) return { kind: "level" as const, need: shop.minLevel };
+    const price = free ? 0 : shop.price;
+    return { kind: "buy" as const, price, afford: price <= balance };
+  };
+
+  const tag = (st: ReturnType<typeof stateOf>, shop: Shop) =>
+    st.kind === "equipped" ? (
+      <span className="carrom-item-tag on">Equipped</span>
+    ) : st.kind === "use" ? (
+      <span className="carrom-item-tag">Owned</span>
+    ) : st.kind === "level" ? (
+      <span className="carrom-item-tag lock">🔒 Lv {st.need}</span>
+    ) : (
+      <span className={`carrom-item-tag price${shop.pro ? " pro" : ""}`}>🪙 {formatTokens(shop.price)}</span>
+    );
+
+  const mainButton = (kind: ShopKind, id: string, name: string, shop: Shop, equipped: boolean) => {
+    const st = stateOf(kind, id, shop, equipped);
+    if (st.kind === "equipped") return <span className="carrom-shop-equipped">✓ Equipped</span>;
+    if (st.kind === "use")
+      return (
+        <button type="button" className="primary-btn" disabled={busy} onClick={() => void act(() => prog.select(kind, id), `${name} equipped.`, false)}>
+          Equip
+        </button>
+      );
+    if (st.kind === "signin")
+      return (
+        <Link className="primary-btn" to="/login?next=/game/carrom">
+          Sign in to buy
+        </Link>
+      );
+    if (st.kind === "level") return <span className="carrom-shop-need">Reach level {st.need} to buy</span>;
+    return (
+      <SpendButton
+        cost={st.price}
+        label={st.afford ? `Buy · ${formatTokens(st.price)} tokens` : `Need ${formatTokens(st.price - balance)} more tokens`}
+        disabled={busy || !st.afford}
+        onConfirm={() =>
+          void act(async () => {
+            await prog.buy(kind, id);
+            await prog.select(kind, id);
+          }, `${name} unlocked and equipped!`)
+        }
+      />
+    );
+  };
+
+  const focused: StrikerSkin = STRIKERS.find((s) => s.id === focus) ?? prog.striker;
+  const fStats = prog.statsFor(focused);
+  const fOwned = prog.owns("striker", focused.id);
 
   return (
     <div className="carrom-locker">
@@ -85,71 +222,160 @@ export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; s
         <button type="button" className="ghost-btn" onClick={onBack}>
           ‹ Back
         </button>
-        <h3>Customize</h3>
+        <h3>Locker</h3>
+        {signedIn ? (
+          <Link to="/tokens" className="carrom-wallet" title="Get more tokens">
+            🪙 {wallet?.unlimited ? "∞" : formatTokens(wallet?.balance ?? 0)}
+          </Link>
+        ) : null}
       </div>
 
-      <LevelBar level={level} xp={prog.progress.xp} pro={pro} />
-      <p className="carrom-hint">Earn XP every match: +10 per coin, +25 for the queen, +100 for a win (+40 if you lose).</p>
+      <LevelBar level={level} xp={prog.xp} pro={pro} />
+      <p className="carrom-hint">Earn XP every match: coins, the queen, combos and wins. Higher levels open the top items and upgrades.</p>
+
+      {prog.serverError ? <p className="carrom-shop-note bad">{prog.serverError}</p> : null}
+      {note ? (
+        <p className={`carrom-shop-note${note.ok ? " ok" : " bad"}`} role="status">
+          {note.text}
+        </p>
+      ) : null}
 
       <div className="carrom-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "striker"} className={tab === "striker" ? "on" : ""} onClick={() => setTab("striker")}>
-          Strikers
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "coins"} className={tab === "coins" ? "on" : ""} onClick={() => setTab("coins")}>
-          Coin sets
-        </button>
+        {(
+          [
+            ["striker", "Strikers"],
+            ["coins", "Coin sets"],
+            ["board", "Boards"],
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+            {label}
+          </button>
+        ))}
       </div>
+
+      {tab === "striker" ? (
+        <div className="carrom-shop-detail">
+          <div className="carrom-shop-hero">
+            <span className={`carrom-shop-preview tier-${tierOf(fStats)}`} style={{ "--glow": focused.glow ?? "rgba(255,170,60,0.9)" } as React.CSSProperties}>
+              <DiscPreview key={focused.id} draw={(px) => strikerSprite(focused, px)} size={96} spin />
+            </span>
+            <div className="carrom-shop-title">
+              <b>{focused.name}</b>
+              <small>{focused.shop.pro ? "Pro collection · " : ""}Tier {tierOf(fStats)} of 3</small>
+              {mainButton("striker", focused.id, focused.name, focused.shop, prog.striker.id === focused.id)}
+            </div>
+          </div>
+
+          <ul className="carrom-stats">
+            {STATS.map(({ key, label, blurb }) => {
+              const lv = fStats[key];
+              const base = focused.base[key];
+              const target = lv + 1;
+              const cost = free ? 0 : upgradeCost(target);
+              const gate = upgradeGate(target);
+              return (
+                <li key={key}>
+                  <div className="carrom-stat-top">
+                    <b>{label}</b>
+                    <small>{blurb}</small>
+                    <span className="carrom-stat-lv">
+                      {lv}/{STAT_MAX}
+                    </span>
+                  </div>
+                  <div className="carrom-stat-bar" aria-label={`${label} level ${lv} of ${STAT_MAX}`}>
+                    {Array.from({ length: STAT_MAX }, (_, i) => (
+                      <i key={i} className={i < base ? "base" : i < lv ? "up" : ""} />
+                    ))}
+                  </div>
+                  {fOwned && signedIn ? (
+                    lv >= STAT_MAX ? (
+                      <span className="carrom-stat-max">MAX</span>
+                    ) : level < gate ? (
+                      <span className="carrom-stat-gate">Lv {target} needs player level {gate}</span>
+                    ) : (
+                      <SpendButton
+                        className="ghost-btn carrom-stat-up"
+                        cost={cost}
+                        label={`Upgrade → ${target} · 🪙 ${formatTokens(cost)}`}
+                        disabled={busy || cost > balance}
+                        onConfirm={() =>
+                          void act(() => prog.upgrade(focused.id, key as StatKey), `${focused.name}: ${label} is now level ${target}!`)
+                        }
+                      />
+                    )
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="carrom-hint">Upgrades count against the CPU and in local games. Online matches use equal strikers for everyone.</p>
+        </div>
+      ) : null}
 
       <div className="carrom-items">
         {tab === "striker"
-          ? STRIKERS.map((s: StrikerSkin) =>
-              item(
-                isUnlocked(s.unlock, level, pro),
-                prog.striker.id === s.id,
-                s.name,
-                unlockLabel(s.unlock),
-                <DiscPreview draw={(px) => strikerSprite(s, px)} size={62} spin={prog.striker.id === s.id} />,
-                () => prog.select({ striker: s.id }),
-                s.id,
-              ),
-            )
-          : COIN_SETS.map((c: CoinSet) =>
-              item(
-                isUnlocked(c.unlock, level, pro),
-                prog.coinSet.id === c.id,
-                c.name,
-                unlockLabel(c.unlock),
-                <span className="carrom-coin-trio">
-                  <DiscPreview draw={(px) => coinSprite(c, "white", px)} size={34} />
-                  <DiscPreview draw={(px) => coinSprite(c, "queen", px)} size={34} />
-                  <DiscPreview draw={(px) => coinSprite(c, "black", px)} size={34} />
-                </span>,
-                () => prog.select({ coins: c.id }),
-                c.id,
-              ),
-            )}
+          ? STRIKERS.map((s) => {
+              const st = stateOf("striker", s.id, s.shop, prog.striker.id === s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`carrom-item${focus === s.id ? " is-on" : ""}${st.kind === "level" ? " is-locked" : ""}`}
+                  onClick={() => setFocus(s.id)}
+                  aria-pressed={focus === s.id}
+                  title={s.name}
+                >
+                  <span className="carrom-item-art">
+                    <DiscPreview draw={(px) => strikerSprite(s, px)} size={56} />
+                  </span>
+                  <span className="carrom-item-name">{s.name}</span>
+                  {tag(st, s.shop)}
+                </button>
+              );
+            })
+          : tab === "coins"
+            ? COIN_SETS.map((c: CoinSet) => {
+                const equipped = prog.coinSet.id === c.id;
+                const st = stateOf("coins", c.id, c.shop, equipped);
+                return (
+                  <div key={c.id} className={`carrom-item is-static${equipped ? " is-on" : ""}${st.kind === "level" ? " is-locked" : ""}`}>
+                    <span className="carrom-item-art carrom-coin-trio">
+                      <DiscPreview draw={(px) => coinSprite(c, "white", px)} size={30} />
+                      <DiscPreview draw={(px) => coinSprite(c, "queen", px)} size={30} />
+                      <DiscPreview draw={(px) => coinSprite(c, "black", px)} size={30} />
+                    </span>
+                    <span className="carrom-item-name">{c.name}</span>
+                    {tag(st, c.shop)}
+                    <div className="carrom-item-action">{mainButton("coins", c.id, c.name, c.shop, equipped)}</div>
+                  </div>
+                );
+              })
+            : BOARDS.map((b) => {
+                const equipped = prog.board.id === b.id;
+                const st = stateOf("board", b.id, b.shop, equipped);
+                return (
+                  <div key={b.id} className={`carrom-item is-static${equipped ? " is-on" : ""}${st.kind === "level" ? " is-locked" : ""}`}>
+                    <span className="carrom-item-art">
+                      <BoardSwatch b={b} />
+                    </span>
+                    <span className="carrom-item-name">{b.name}</span>
+                    {tag(st, b.shop)}
+                    <div className="carrom-item-action">{mainButton("board", b.id, b.name, b.shop, equipped)}</div>
+                  </div>
+                );
+              })}
       </div>
 
-      {!pro ? (
-        <div className="carrom-pro-card">
-          <div>
-            <b>Senevon Pro</b>
-            <p>Unlock every striker and coin set instantly, including Pro-only designs like Galaxy, Lava Core and Crystal.</p>
-          </div>
-          {signedIn ? (
-            <button type="button" className="primary-btn" disabled title="Payments are coming soon">
-              Upgrade — coming soon
-            </button>
-          ) : (
-            <Link className="primary-btn" to="/login?next=/game/carrom">
-              Sign in to go Pro
-            </Link>
-          )}
-        </div>
-      ) : (
-        <p className="carrom-hint">You're Pro — everything is unlocked. Thanks for supporting Senevon!</p>
-      )}
-      {!signedIn ? <p className="carrom-hint">Playing as guest: your level is saved on this device only. Sign in to keep it everywhere.</p> : null}
+      {pro ? (
+        <p className="carrom-hint">You're Pro: every striker, coin set and board is yours. Upgrades still use tokens.</p>
+      ) : null}
+      {!signedIn ? (
+        <p className="carrom-hint">
+          Playing as guest: you can use the free items and your level is saved on this device. <Link to="/login?next=/game/carrom">Sign in</Link> to
+          buy items and upgrade strikers with tokens.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   SIZE,
   SUB,
   applyLive,
+  boardPoints,
   applySnapshot,
   baselineFor,
   clamp,
@@ -33,6 +34,7 @@ import { planCpuShot, type CpuPlan } from "./cpu";
 import {
   CarromFx,
   drawAim,
+  drawAimPreview,
   drawBaselineGlow,
   drawBoard,
   drawCoin,
@@ -48,6 +50,7 @@ import { useAuthContext } from "../../context/AuthContext";
 import { carromAudio } from "./audio";
 import { STRIKERS, type StrikerSkin } from "./skins";
 import { matchXp, useCarromProgress } from "./progress";
+import { CPU_STATS, FAIR_STATS, tierOf, type StrikerStats } from "./stats";
 import CarromLocker, { LevelBar } from "./Locker";
 import "./carrom.css";
 
@@ -65,6 +68,18 @@ type Phase =
   | "over";
 
 const LOCAL_MODES: Mode[] = ["cpu", "local2", "local4"];
+
+/** Single board, or a match of boards: first to 25 points (vs CPU and local games). */
+type Format = "board" | "match";
+const MATCH_TARGET = 25;
+const FORMAT_KEY = "senevon:carrom-format";
+const readFormat = (): Format => {
+  try {
+    return localStorage.getItem(FORMAT_KEY) === "match" ? "match" : "board";
+  } catch {
+    return "board";
+  }
+};
 
 /** Time each player gets to place and shoot. */
 const TURN_SECONDS = 15;
@@ -101,16 +116,36 @@ export default function CarromGame({ onFinish }: GameProps) {
   const fxRef = useRef(new CarromFx());
   const lastShotRef = useRef(0);
   const frameDtRef = useRef(0.016);
+  // the striker on the table right now: upgrade tier (visual effects) and its glow colour
+  const strikerTierRef = useRef(0);
+  const strikerGlowRef = useRef<string | undefined>(undefined);
 
   const auth = useAuthContext();
   const prog = useCarromProgress(auth.user);
   const progRef = useRef(prog);
   progRef.current = prog;
   const [muted, setMuted] = useState(carromAudio.muted);
-  const [reward, setReward] = useState<{ xp: number; before: number; after: number; unlocked: string[] } | null>(null);
+  const [reward, setReward] = useState<{ xp: number; before: number; after: number; combos: number } | null>(null);
+  const [format, setFormatState] = useState<Format>(readFormat);
+  const formatRef = useRef<Format>(format);
+  formatRef.current = format;
+  const setFormat = (f: Format) => {
+    setFormatState(f);
+    try {
+      localStorage.setItem(FORMAT_KEY, f);
+    } catch {
+      /* ignore */
+    }
+  };
+  // match score (points per colour) and the board number; `between` = a board just ended
+  const matchRef = useRef({ white: 0, black: 0, board: 1 });
+  const [matchScore, setMatchScore] = useState({ white: 0, black: 0, board: 1 });
+  const [between, setBetween] = useState<{ text: string } | null>(null);
+  // XP bookkeeping across the boards of a match, for the local player
+  const tallyRef = useRef({ coins: 0, queen: false, combos: 0, streak: 0 });
 
   const [screen, setScreen] = useState<Phase>("menu");
-  const [message, setMessage] = useState("Pick a mode to play.");
+  const [message, setMessage] = useState("Pick a mode.");
   const [potted, setPotted] = useState({ white: 0, black: 0 });
   const [queenText, setQueenText] = useState("in play");
   const [powerN, setPowerN] = useState(0.65);
@@ -165,53 +200,86 @@ export default function CarromGame({ onFinish }: GameProps) {
     [setPhase],
   );
 
-  /** XP for the local player at the end of a match (vs CPU and online only). */
-  const awardXp = useCallback((world: World) => {
-    const mode = modeRef.current;
-    if (mode === "local2" || mode === "local4") return;
+  /** Adds this board's coins / queen to the local player's match tally. */
+  const tallyBoard = useCallback((world: World) => {
     const myColor = world.players[mySeatRef.current]?.color;
     if (!myColor) return;
-    const coins = world.potted[myColor].length;
-    const queen = world.queen.state === "owned" && world.queen.color === myColor;
-    const won = world.result?.winner === myColor;
-    const xp = matchXp(coins, queen, won);
+    tallyRef.current.coins += world.potted[myColor].length;
+    if (world.queen.state === "owned" && world.queen.color === myColor) tallyRef.current.queen = true;
+  }, []);
+
+  /** XP for the local player at the end of a match (vs CPU and online only). */
+  const awardXp = useCallback((won: boolean) => {
+    const mode = modeRef.current;
+    if (mode === "local2" || mode === "local4") return;
+    const t = tallyRef.current;
+    const xp = matchXp(t.coins, t.queen, won, t.combos);
     const res = progRef.current.addXp(xp);
-    setReward({ xp, ...res });
+    setReward({ xp, combos: t.combos, ...res });
   }, []);
 
   const finishShot = useCallback(() => {
     const world = worldRef.current;
     if (!world) return;
+    const shooter = world.turn;
     const res = resolveShot(world);
     setPotted({ white: world.potted.white.length, black: world.potted.black.length });
     setQueenText(queenTextOf(world));
 
+    // combos (local player): extra coins in one shot, and pots on back-to-back shots
+    if (shooter === mySeatRef.current) {
+      const t = tallyRef.current;
+      if (res.ownPots > 0) {
+        t.combos += res.ownPots - 1;
+        t.streak += 1;
+        if (t.streak >= 2) t.combos += 1;
+      } else t.streak = 0;
+    }
+
     if (res.over) {
-      const winSeat = world.players.find((p) => p.color === world.result?.winner);
-      const score = scoreForSeat(world, mySeatRef.current);
-      setMessage(
-        `${res.msg} ${winSeat ? `${winSeat.name} win${winSeat.name === "You" ? "" : "s"}!` : ""}`,
-      );
+      const winColor = world.result?.winner;
+      const winSeat = world.players.find((p) => p.color === winColor);
+      const winName = winSeat ? `${winSeat.name} win${winSeat.name === "You" ? "" : "s"}` : "Board over";
+      const myColor = world.players[mySeatRef.current]?.color;
+      tallyBoard(world);
+      if (netRef.current && modeRef.current.startsWith("host")) {
+        netRef.current.broadcastSnapshot(snapshotOf(world));
+      }
+
+      // a match of boards (not online): score the board, then the next one or the match result
+      if (formatRef.current === "match" && LOCAL_MODES.includes(modeRef.current) && winColor) {
+        const m = matchRef.current;
+        const pts = boardPoints(world, m[winColor]);
+        m[winColor] += pts;
+        setMatchScore({ ...m });
+        if (m[winColor] < MATCH_TARGET) {
+          setMessage(`${winName} board ${m.board} (+${pts}).`);
+          setBetween({ text: `Board ${m.board}: ${winName.toLowerCase()} +${pts}` });
+          setPhase("over");
+          return;
+        }
+        setMessage(`${winName} the match ${m.white}–${m.black}!`);
+      } else {
+        setMessage(`${winName}!`);
+      }
+      setBetween(null);
       setPhase("over");
       if (!finishedRef.current) {
         finishedRef.current = true;
-        onFinish(score);
-        awardXp(world);
-      }
-      if (netRef.current && modeRef.current.startsWith("host")) {
-        netRef.current.broadcastSnapshot(snapshotOf(world));
+        onFinish(scoreForSeat(world, mySeatRef.current) + (formatRef.current === "match" ? matchRef.current[myColor ?? "white"] * 5 : 0));
+        awardXp(winColor === myColor);
       }
       return;
     }
 
-    setMessage(res.msg + (res.extra ? " Shoot again." : ""));
+    setMessage(res.msg + (res.extra ? " Go again!" : ""));
     if (netRef.current && modeRef.current.startsWith("host")) {
       netRef.current.broadcastSnapshot(snapshotOf(world));
     }
     const turn = world.turn;
     setTurnName(world.players[turn].name);
     setPhase(world.players[turn].kind === "cpu" ? "cpu" : "place");
-  }, [onFinish, queenTextOf, setPhase, awardXp]);
+  }, [onFinish, queenTextOf, setPhase, awardXp, tallyBoard]);
 
   /** The turn clock ran out. A shot already being pulled back is released; otherwise the turn passes. */
   const timeoutTurn = useCallback(() => {
@@ -228,7 +296,7 @@ export default function CarromGame({ onFinish }: GameProps) {
     const name = world.players[world.turn].name;
     skipTurn(world);
     carromAudio.timeout();
-    const msg = `${name} ran out of time — turn passes.`;
+    const msg = `${name} timed out.`;
     setMessage(msg);
     setQueenText(queenTextOf(world));
     setTurnName(world.players[world.turn].name);
@@ -266,7 +334,7 @@ export default function CarromGame({ onFinish }: GameProps) {
       }
 
       if (world && phaseRef.current === "shooting") {
-        acc += dt;
+        acc += dt * fxRef.current.timeScale(dt);
         let guard = 0;
         while (acc >= SUB && guard < 40) {
           stepPhysics(world, SUB);
@@ -287,6 +355,14 @@ export default function CarromGame({ onFinish }: GameProps) {
               .map((d) => [d.id, Math.round(d.x), Math.round(d.y)] as LivePos),
           );
         }
+        // the queen or a side's last coin dropping: play it in slow motion
+        for (const e of world.events) {
+          if (e.type !== "pot") continue;
+          const last = (e.kind === "white" || e.kind === "black") && !world.discs.some((d) => d.alive && d.kind === e.kind);
+          if (e.kind === "queen" || last) fxRef.current.slowMo(0.9);
+        }
+        fxRef.current.strikerMass = world.striker.m;
+        fxRef.current.trackStriker(world.striker, strikerTierRef.current, strikerGlowRef.current);
         fxRef.current.consume(world.events);
         // powder hiss follows how much is moving
         let moving = 0;
@@ -305,7 +381,7 @@ export default function CarromGame({ onFinish }: GameProps) {
           carromAudio.slide(0);
         }
       }
-      if (world) tickSinks(world, dt);
+      if (world) tickSinks(world, phaseRef.current === "shooting" ? dt * fxRef.current.timeScale(0) : dt);
 
       // turn clock
       if (world && phaseRef.current === "place" && deadlineRef.current > 0) {
@@ -339,7 +415,7 @@ export default function CarromGame({ onFinish }: GameProps) {
         cpuPlanRef.current = plan;
         world.strikerT[world.turn] = plan.t;
         resetStriker(world, world.turn);
-        setMessage(`${world.players[world.turn].name} is lining up a shot…`);
+        setMessage(`${world.players[world.turn].name} is aiming…`);
         setPhase("cpu-aim");
       }, 700);
       return () => window.clearTimeout(t1);
@@ -363,50 +439,71 @@ export default function CarromGame({ onFinish }: GameProps) {
 
   /* ============ local games ============ */
 
-  function startLocal(mode: "cpu" | "local2" | "local4") {
+  /** Start a new match (or, with `nextBoard`, the next board of the current match). */
+  function startLocal(mode: "cpu" | "local2" | "local4", nextBoard = false) {
     carromAudio.unlock();
     modeRef.current = mode;
     mySeatRef.current = 0;
     finishedRef.current = false;
     setReward(null);
+    setBetween(null);
     netRef.current?.leave();
     netRef.current = null;
-    const players: Array<{ name: string; kind: "human" | "cpu" }> =
+    if (nextBoard) {
+      matchRef.current.board += 1;
+    } else {
+      matchRef.current = { white: 0, black: 0, board: 1 };
+      tallyRef.current = { coins: 0, queen: false, combos: 0, streak: 0 };
+    }
+    setMatchScore({ ...matchRef.current });
+    // your upgraded striker vs the CPU and on this device; the CPU is the same for everyone
+    const mine: StrikerStats = progRef.current.strikerStats;
+    const players: Array<{ name: string; kind: "human" | "cpu"; stats: StrikerStats }> =
       mode === "cpu"
         ? [
-            { name: "You", kind: "human" },
-            { name: "CPU", kind: "cpu" },
+            { name: "You", kind: "human", stats: mine },
+            { name: "CPU", kind: "cpu", stats: CPU_STATS },
           ]
         : mode === "local2"
           ? [
-              { name: "Player 1", kind: "human" },
-              { name: "Player 2", kind: "human" },
+              { name: "Player 1", kind: "human", stats: mine },
+              { name: "Player 2", kind: "human", stats: mine },
             ]
           : [
-              { name: "P1", kind: "human" },
-              { name: "P2", kind: "human" },
-              { name: "P3", kind: "human" },
-              { name: "P4", kind: "human" },
+              { name: "P1", kind: "human", stats: mine },
+              { name: "P2", kind: "human", stats: mine },
+              { name: "P3", kind: "human", stats: mine },
+              { name: "P4", kind: "human", stats: mine },
             ];
     const world = makeWorld({ seats: mode === "local4" ? 4 : 2, players });
+    // boards of a match take turns to break
+    const breaker = (matchRef.current.board - 1) % world.players.length;
+    if (breaker) {
+      world.turn = breaker;
+      resetStriker(world, breaker);
+    }
     worldRef.current = world;
     setPotted({ white: 0, black: 0 });
     setQueenText("in play");
     setPowerN(0.65);
-    setTurnName(world.players[0].name);
+    setTurnName(world.players[world.turn].name);
     aimRef.current = {
-      dir: { ...minDirFor(0, world.seats) },
+      dir: { ...minDirFor(world.turn, world.seats) },
       power: 0.65,
       valid: true,
     };
+    const boardTag = formatRef.current === "match" ? `Board ${matchRef.current.board}. ` : "";
     setMessage(
-      mode === "local4"
-        ? "Teams: P1+P3 (white) vs P2+P4 (black). P1 breaks!"
-        : mode === "local2"
-          ? "Pass the device — Player 1 (white) breaks!"
-          : "Break! Slide to place the striker, then pull back and release to shoot.",
+      boardTag +
+        (mode === "local4"
+          ? "P1+P3 vs P2+P4. Break!"
+          : mode === "local2"
+            ? "Pass & play. Break!"
+            : world.turn === 0
+              ? "Break! Place, pull back, release."
+              : "CPU breaks."),
     );
-    setPhase("place");
+    setPhase(world.players[world.turn].kind === "cpu" ? "cpu" : "place");
   }
 
   /* ============ online wiring ============ */
@@ -427,11 +524,15 @@ export default function CarromGame({ onFinish }: GameProps) {
       onStart: (cfg: { seats: Seats; players: Array<{ name: string; kind: "human" | "cpu" }> }) => {
         finishedRef.current = false;
         setReward(null);
-        const players = cfg.players.map((p, i): { seat: number; name: string; kind: SeatKind } => ({
+        // online: equal strikers for everyone, so upgrades never decide a match
+        const players = cfg.players.map((p, i): { seat: number; name: string; kind: SeatKind; stats: StrikerStats } => ({
           seat: i,
           name: p.name,
           kind: mySeatRef.current === i ? "human" : p.kind === "cpu" ? "cpu" : "remote",
+          stats: FAIR_STATS,
         }));
+        matchRef.current = { white: 0, black: 0, board: 1 };
+        tallyRef.current = { coins: 0, queen: false, combos: 0, streak: 0 };
         const world = makeWorld({ seats: cfg.seats, players });
         worldRef.current = world;
         setPotted({ white: 0, black: 0 });
@@ -443,7 +544,7 @@ export default function CarromGame({ onFinish }: GameProps) {
           power: 0.65,
           valid: true,
         };
-        setMessage("Game on — good luck!");
+        setMessage("Game on. Good luck!");
         setPhase("place");
       },
       onSnapshot: (snap: Snap) => {
@@ -459,7 +560,8 @@ export default function CarromGame({ onFinish }: GameProps) {
           if (!finishedRef.current) {
             finishedRef.current = true;
             onFinish(score);
-            awardXp(world);
+            tallyBoard(world);
+            awardXp(world.players[mySeatRef.current]?.color === snap.winner);
           }
           return;
         }
@@ -474,7 +576,7 @@ export default function CarromGame({ onFinish }: GameProps) {
       },
       onMessage: (text: string) => setMessage(text),
     }),
-    [onFinish, queenTextOf, setPhase, awardXp],
+    [onFinish, queenTextOf, setPhase, awardXp, tallyBoard],
   );
 
   function hostRoom(seats: Seats) {
@@ -527,7 +629,7 @@ export default function CarromGame({ onFinish }: GameProps) {
     setNetStatus("idle");
     setNetNote(null);
     setPhase("menu");
-    setMessage("Pick a mode to play.");
+    setMessage("Pick a mode.");
   }
 
   /* guest place/shot commands applied by the host */
@@ -617,12 +719,12 @@ export default function CarromGame({ onFinish }: GameProps) {
     if (!drag || phaseRef.current !== "place") return;
     const { dir, power, valid } = aimRef.current;
     if (power < 0.05) {
-      setMessage("Press on the board and pull back (away from your target), then let go to shoot.");
+      setMessage("Pull back from the target, release.");
       return;
     }
     if (!valid) {
       aimRef.current.power = 0;
-      setMessage("Aim into the board — pull back towards your own edge to shoot forward.");
+      setMessage("Aim into the board.");
       return;
     }
     fireRef.current(dir, power);
@@ -740,13 +842,18 @@ export default function CarromGame({ onFinish }: GameProps) {
       turnKind === "human" &&
       (modeRef.current === "local2" || modeRef.current === "local4" || world.turn === mySeatRef.current);
     const skin: StrikerSkin = mine ? p.striker : STRIKERS[0];
+    const turnStats = world.players[world.turn]?.stats;
+    // upgrade tier effects only for your own striker
+    strikerTierRef.current = mine && turnStats ? tierOf(turnStats) : 0;
+    strikerGlowRef.current = skin.glow;
 
-    drawBoard(ctx);
+    drawBoard(ctx, p.board);
     const ph = phaseRef.current;
     if (ph === "place" && canControl()) {
       drawBaselineGlow(ctx, world, world.turn);
     }
 
+    fxRef.current.drawUnder(ctx, frameDtRef.current);
     drawSinks(ctx, world, coinSet, skin);
     for (const d of world.discs) {
       if (!d.alive || d.kind === "striker") continue;
@@ -755,7 +862,7 @@ export default function CarromGame({ onFinish }: GameProps) {
 
     const aim = aimRef.current;
     if (ph === "place" && canControl() && aim.power > 0.03) {
-      drawAim(ctx, world.striker, aim.dir, aim.power, aim.valid ? "rgba(31,92,180,0.85)" : "rgba(200,40,30,0.85)");
+      drawAimPreview(ctx, world, aim.dir, aim.power, turnStats?.aim ?? 1, aim.valid);
       if (dragRef.current) drawPullBand(ctx, world.striker, aim.dir, aim.power, aim.valid);
     }
     if (ph === "cpu-aim" && cpuPlanRef.current) {
@@ -777,6 +884,7 @@ export default function CarromGame({ onFinish }: GameProps) {
         ph === "place" || ph === "cpu-aim",
         pull || cpuPull,
         ph === "cpu-aim" && cpuPlanRef.current ? cpuPlanRef.current.dir : aim.dir,
+        strikerTierRef.current,
       );
       if (ph === "place" && deadlineRef.current > 0) {
         drawTurnTimer(ctx, world.striker, (deadlineRef.current - performance.now()) / TURN_MS);
@@ -806,9 +914,17 @@ export default function CarromGame({ onFinish }: GameProps) {
         {screen === "menu" ? (
           <div className="carrom-menu">
             <button type="button" className="carrom-profile" onClick={() => setPhase("locker")}>
-              <LevelBar level={prog.level} xp={prog.progress.xp} pro={prog.pro} compact />
-              <span className="carrom-profile-cta">Customize ›</span>
+              <LevelBar level={prog.level} xp={prog.xp} pro={prog.pro} compact />
+              <span className="carrom-profile-cta">Locker & shop ›</span>
             </button>
+            <div className="carrom-format" role="radiogroup" aria-label="Match length">
+              <button type="button" role="radio" aria-checked={format === "board"} className={format === "board" ? "on" : ""} onClick={() => setFormat("board")}>
+                Quick · 1 board
+              </button>
+              <button type="button" role="radio" aria-checked={format === "match"} className={format === "match" ? "on" : ""} onClick={() => setFormat("match")}>
+                Match · first to {MATCH_TARGET}
+              </button>
+            </div>
             <button type="button" className="primary-btn" onClick={() => startLocal("cpu")}>
               Single player vs CPU
             </button>
@@ -955,8 +1071,26 @@ export default function CarromGame({ onFinish }: GameProps) {
         </div>
       </div>
 
+      {format === "match" && LOCAL_MODES.includes(modeRef.current) ? (
+        <p className="carrom-matchbar" aria-label="Match score">
+          <span>Board {matchScore.board}</span>
+          <b>
+            White {matchScore.white} – {matchScore.black} Black
+          </b>
+          <span>to {MATCH_TARGET}</span>
+        </p>
+      ) : null}
+
       <div className="carrom-statusrow">
-        <p className="game-status">{screen === "over" ? message : `${turnName}'s turn — ${message}`}</p>
+        {(() => {
+          const line =
+            screen === "over" ? message : `${turnName === "You" ? "Your" : `${turnName}'s`} turn · ${message}`;
+          return (
+            <p className="game-status carrom-status-line" title={line} aria-live="polite">
+              {line}
+            </p>
+          );
+        })()}
         {screen === "place" ? (
           <span
             className={`carrom-timer${secsLeft <= 5 ? " warn" : ""}`}
@@ -987,9 +1121,9 @@ export default function CarromGame({ onFinish }: GameProps) {
       {screen === "over" && reward ? (
         <div className="carrom-reward" role="status">
           <b>+{reward.xp} XP</b>
+          {reward.combos > 0 ? <span className="carrom-combo">Combo bonus ×{reward.combos}</span> : null}
           {reward.after > reward.before ? <span className="carrom-levelup">Level up! Level {reward.after}</span> : null}
-          <LevelBar level={prog.level} xp={prog.progress.xp} pro={prog.pro} />
-          {reward.unlocked.length ? <p className="carrom-unlocked">Unlocked: {reward.unlocked.join(", ")}</p> : null}
+          <LevelBar level={prog.level} xp={prog.xp} pro={prog.pro} />
         </div>
       ) : null}
 
@@ -1050,16 +1184,20 @@ export default function CarromGame({ onFinish }: GameProps) {
             if (isOnline) {
               leaveNet();
             } else {
-              startLocal(modeRef.current as "cpu" | "local2" | "local4");
+              startLocal(modeRef.current as "cpu" | "local2" | "local4", Boolean(between));
             }
           }}
         >
-          {isOnline ? "Back to menu" : "Play again"}
+          {isOnline ? "Back to menu" : between ? `Next board (${matchScore.board + 1})` : "Play again"}
         </button>
       ) : null}
       {screen === "over" ? (
-        <button type="button" className="ghost-btn" onClick={() => (isOnline ? leaveNet() : setPhase("locker"))}>
-          {isOnline ? "Leave" : "Customize striker & coins"}
+        <button
+          type="button"
+          className="ghost-btn"
+          onClick={() => (isOnline ? leaveNet() : between ? startLocal(modeRef.current as "cpu" | "local2" | "local4") : setPhase("locker"))}
+        >
+          {isOnline ? "Leave" : between ? "Restart match" : "Locker & shop"}
         </button>
       ) : (
         <button

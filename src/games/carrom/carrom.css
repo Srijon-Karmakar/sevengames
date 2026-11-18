@@ -642,3 +642,414 @@
     animation: none;
   }
 }
+
+/* Status: one fixed line as wide as the board, so the layout never jumps as messages change */
+.carrom-statusrow {
+  width: min(600px, 100%);
+}
+
+.gp-stage .carrom-statusrow .carrom-status-line,
+.carrom-statusrow .carrom-status-line {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  margin: 0;
+  padding: 0 16px;
+  line-height: 34px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 480px) {
+  .gp-stage .carrom-statusrow .carrom-status-line,
+  .carrom-statusrow .carrom-status-line {
+    padding: 0 12px;
+    font-size: 12px;
+  }
+}
+
+/* ============================================================
+   Match length toggle, match score, combo, shop + upgrades
+   (colours mix with currentColor so they read in light and dark game themes)
+   ============================================================ */
+.carrom-format {
+  display: inline-flex;
+  justify-self: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.carrom-format button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.carrom-format button.on {
+  opacity: 1;
+  color: #1a0b02;
+  background: linear-gradient(180deg, #ffb06a, #ff7a1a);
+}
+
+.carrom-matchbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: min(600px, 100%);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.carrom-matchbar span {
+  opacity: 0.65;
+  font-weight: 600;
+}
+
+.carrom-matchbar b {
+  font-variant-numeric: tabular-nums;
+}
+
+.carrom-combo {
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #062b17;
+  background: linear-gradient(90deg, #7df9b8, #2fd47f);
+  animation: carrom-pop 0.5s 0.1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ---------- shop ---------- */
+.carrom-wallet {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  transition: transform 0.2s ease;
+}
+
+.carrom-wallet:hover {
+  transform: translateY(-1px);
+}
+
+.carrom-shop-note {
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: center;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.carrom-shop-note.ok {
+  color: #2fd47f;
+}
+
+.carrom-shop-note.bad {
+  color: #ff7a5c;
+}
+
+.carrom-shop-detail {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.carrom-shop-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.carrom-shop-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+}
+
+.carrom-shop-preview.tier-1 {
+  box-shadow: 0 0 0 2px rgba(214, 170, 80, 0.7);
+}
+
+.carrom-shop-preview.tier-2,
+.carrom-shop-preview.tier-3 {
+  box-shadow: 0 0 0 2px rgba(214, 170, 80, 0.8), 0 0 34px -4px var(--glow);
+  animation: carrom-breathe 2.6s ease-in-out infinite;
+}
+
+.carrom-shop-preview.tier-3::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px dashed var(--glow);
+  animation: carrom-orbit 6s linear infinite;
+}
+
+@keyframes carrom-breathe {
+  50% {
+    box-shadow: 0 0 0 2px rgba(214, 170, 80, 0.8), 0 0 48px 2px var(--glow);
+  }
+}
+
+@keyframes carrom-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.carrom-shop-title {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.carrom-shop-title b {
+  font-size: 18px;
+}
+
+.carrom-shop-title small {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.carrom-shop-title .primary-btn {
+  text-decoration: none;
+}
+
+.carrom-shop-equipped {
+  font-size: 13px;
+  font-weight: 800;
+  color: #2fd47f;
+}
+
+.carrom-shop-need {
+  font-size: 12.5px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.primary-btn.is-armed,
+.ghost-btn.is-armed {
+  animation: carrom-armed 0.9s ease-in-out infinite;
+}
+
+@keyframes carrom-armed {
+  50% {
+    filter: brightness(1.15);
+    box-shadow: 0 0 0 3px rgba(255, 138, 61, 0.45);
+  }
+}
+
+/* stat bars */
+.carrom-stats {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carrom-stats li {
+  display: grid;
+  gap: 6px;
+}
+
+.carrom-stat-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.carrom-stat-top b {
+  font-size: 14px;
+}
+
+.carrom-stat-top small {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  opacity: 0.6;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.carrom-stat-lv {
+  font-size: 12.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.carrom-stat-bar {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+}
+
+.carrom-stat-bar i {
+  height: 8px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  transition: background 0.3s ease;
+}
+
+.carrom-stat-bar i.base {
+  background: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.carrom-stat-bar i.up {
+  background: linear-gradient(90deg, #ffb06a, #ff7a1a);
+  box-shadow: 0 0 8px rgba(255, 122, 26, 0.5);
+}
+
+.carrom-stat-up {
+  justify-self: start;
+  padding: 6px 12px !important;
+  font-size: 12.5px !important;
+}
+
+.carrom-stat-max {
+  justify-self: start;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #ff9a3d;
+}
+
+.carrom-stat-gate {
+  font-size: 12px;
+  font-weight: 650;
+  opacity: 0.6;
+}
+
+/* item cards that aren't buttons (coins, boards) */
+.carrom-item.is-static {
+  cursor: default;
+}
+
+.carrom-item-action {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.carrom-item-action .primary-btn {
+  padding: 7px 10px;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.carrom-item-action .carrom-shop-equipped,
+.carrom-item-action .carrom-shop-need {
+  font-size: 11.5px;
+}
+
+.carrom-item-tag.price {
+  color: #ffb36b;
+  background: rgba(255, 138, 61, 0.12);
+}
+
+.carrom-item-tag.price.pro {
+  color: #1b0f00;
+  background: linear-gradient(90deg, #ffe08a, #ffb300);
+}
+
+/* board swatch: frame, playfield, centre circle */
+.carrom-board-swatch {
+  position: relative;
+  display: block;
+  width: 62px;
+  height: 62px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--f1), var(--f2));
+  border: 6px solid var(--frame);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25), 0 6px 14px -8px rgba(0, 0, 0, 0.7);
+}
+
+.carrom-board-swatch i {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  box-shadow: 0 0 10px var(--glow);
+}
+
+.carrom-board-swatch::before,
+.carrom-board-swatch::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #120a05;
+  box-shadow: 0 0 0 1.5px var(--brass);
+}
+
+.carrom-board-swatch::before {
+  top: 1px;
+  left: 1px;
+}
+
+.carrom-board-swatch::after {
+  right: 1px;
+  bottom: 1px;
+}
+
+@media (max-width: 480px) {
+  .carrom-shop-hero {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .carrom-shop-title {
+    justify-items: center;
+  }
+
+  .carrom-items {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carrom-shop-preview.tier-2,
+  .carrom-shop-preview.tier-3,
+  .carrom-shop-preview.tier-3::after,
+  .primary-btn.is-armed,
+  .ghost-btn.is-armed,
+  .carrom-combo {
+    animation: none;
+  }
+}

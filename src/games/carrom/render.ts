@@ -24,7 +24,8 @@ import {
   type Vec,
   type World,
 } from "./engine";
-import { coinSprite, lightingSprite, strikerSprite, type CoinSet, type StrikerSkin } from "./skins";
+import { BOARDS, coinSprite, lightingSprite, strikerSprite, type BoardTheme, type CoinSet, type StrikerSkin } from "./skins";
+import { AIM_FULL_PREVIEW, AIM_TARGET_LINE, aimReachFor } from "./stats";
 import { carromAudio } from "./audio";
 
 const reduced = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -41,7 +42,7 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 
 /* ======================= board (painted once) ======================= */
 
-let boardCache: { px: number; canvas: HTMLCanvasElement } | null = null;
+let boardCache: { px: number; theme: string; canvas: HTMLCanvasElement } | null = null;
 
 function woodGrain(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, horizontal: boolean, color: string, count: number, seed: number) {
   let s = seed;
@@ -72,7 +73,7 @@ function woodGrain(g: CanvasRenderingContext2D, x: number, y: number, w: number,
   g.restore();
 }
 
-function paintBoard(px: number) {
+function paintBoard(px: number, th: BoardTheme) {
   const c = document.createElement("canvas");
   c.width = c.height = px;
   const g = c.getContext("2d")!;
@@ -80,15 +81,15 @@ function paintBoard(px: number) {
 
   // --- frame: dark lacquered rosewood, four mitred planks with their own grain direction ---
   rr(g, 0, 0, SIZE, SIZE, 34);
-  g.fillStyle = "#4a2614";
+  g.fillStyle = th.frame;
   g.fill();
   g.save();
   rr(g, 0, 0, SIZE, SIZE, 34);
   g.clip();
-  woodGrain(g, 0, 0, SIZE, WALL + 4, true, "#1c0c04", 22, 7);
-  woodGrain(g, 0, PF_MAX - 4, SIZE, WALL + 4, true, "#1c0c04", 22, 11);
-  woodGrain(g, 0, 0, WALL + 4, SIZE, false, "#1c0c04", 22, 13);
-  woodGrain(g, PF_MAX - 4, 0, WALL + 4, SIZE, false, "#1c0c04", 22, 17);
+  woodGrain(g, 0, 0, SIZE, WALL + 4, true, th.frameGrain, 22, 7);
+  woodGrain(g, 0, PF_MAX - 4, SIZE, WALL + 4, true, th.frameGrain, 22, 11);
+  woodGrain(g, 0, 0, WALL + 4, SIZE, false, th.frameGrain, 22, 13);
+  woodGrain(g, PF_MAX - 4, 0, WALL + 4, SIZE, false, th.frameGrain, 22, 17);
   // lacquer sheen along the top-left of the frame
   const sheen = g.createLinearGradient(0, 0, SIZE, SIZE);
   sheen.addColorStop(0, "rgba(255,210,170,0.28)");
@@ -115,11 +116,31 @@ function paintBoard(px: number) {
   // --- playfield: pale maple plywood, fine grain, powdered sheen ---
   const W = PF_MAX - PF_MIN;
   const maple = g.createLinearGradient(0, PF_MIN, 0, PF_MAX);
-  maple.addColorStop(0, "#f6e3b8");
-  maple.addColorStop(1, "#ead09a");
+  maple.addColorStop(0, th.field[0]);
+  maple.addColorStop(1, th.field[1]);
   g.fillStyle = maple;
   g.fillRect(PF_MIN, PF_MIN, W, W);
-  woodGrain(g, PF_MIN, PF_MIN, W, W, true, "#9c6a2e", 90, 3);
+  woodGrain(g, PF_MIN, PF_MIN, W, W, true, th.fieldGrain, 90, 3);
+  // fine cross-grain fibres + knots so the plywood doesn't look painted
+  woodGrain(g, PF_MIN, PF_MIN, W, W, false, th.fieldGrain, 24, 29);
+  {
+    let k = 41;
+    const rnd = () => ((k = (k * 16807) % 2147483647) / 2147483647);
+    g.save();
+    for (let i = 0; i < 5; i++) {
+      const kx = PF_MIN + 60 + rnd() * (W - 120);
+      const ky = PF_MIN + 60 + rnd() * (W - 120);
+      const kg = g.createRadialGradient(kx, ky, 0, kx, ky, 16 + rnd() * 12);
+      kg.addColorStop(0, th.fieldGrain);
+      kg.addColorStop(1, "rgba(0,0,0,0)");
+      g.globalAlpha = 0.08;
+      g.fillStyle = kg;
+      g.beginPath();
+      g.ellipse(kx, ky, 34, 12, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+  }
   const powder = g.createRadialGradient(470, 430, 60, 500, 500, 640);
   powder.addColorStop(0, "rgba(255,255,255,0.28)");
   powder.addColorStop(0.6, "rgba(255,255,255,0.06)");
@@ -143,8 +164,12 @@ function paintBoard(px: number) {
   g.strokeRect(PF_MIN, PF_MIN, W, W);
 
   // --- markings (printed red/black ink) ---
-  const ink = "#9e2b25";
+  const ink = th.ink;
   g.save();
+  if (th.glow) {
+    g.shadowColor = th.glow;
+    g.shadowBlur = 14;
+  }
   g.strokeStyle = ink;
   g.fillStyle = ink;
   g.globalAlpha = 0.92;
@@ -218,7 +243,7 @@ function paintBoard(px: number) {
       g.beginPath();
       g.arc(cx, y, 17, 0, Math.PI * 2);
       g.fill();
-      g.fillStyle = "#f3dcaa";
+      g.fillStyle = th.field[0];
       g.beginPath();
       g.arc(cx, y, 6, 0, Math.PI * 2);
       g.fill();
@@ -252,22 +277,35 @@ function paintBoard(px: number) {
     }
     g.restore();
     const brass = g.createLinearGradient(p.x - POCKET_R, p.y - POCKET_R, p.x + POCKET_R, p.y + POCKET_R);
-    brass.addColorStop(0, "#f7d98a");
-    brass.addColorStop(0.5, "#a77a26");
-    brass.addColorStop(1, "#5c3f0c");
+    brass.addColorStop(0, th.brass[0]);
+    brass.addColorStop(0.5, th.brass[1]);
+    brass.addColorStop(1, th.brass[2]);
     g.lineWidth = 5;
     g.strokeStyle = brass;
     g.beginPath();
     g.arc(p.x, p.y, POCKET_R + 1, 0, Math.PI * 2);
     g.stroke();
   }
+
+  // overhead lamp: warm pool of light in the middle, corners fall off into shadow
+  const lamp = g.createRadialGradient(480, 460, 120, 500, 500, 760);
+  lamp.addColorStop(0, "rgba(255,240,210,0.10)");
+  lamp.addColorStop(0.55, "rgba(0,0,0,0)");
+  lamp.addColorStop(1, "rgba(0,0,0,0.32)");
+  g.fillStyle = lamp;
+  g.fillRect(0, 0, SIZE, SIZE);
   return c;
 }
 
-/** The static board, cached at the canvas' pixel size. */
-export function drawBoard(ctx: CanvasRenderingContext2D) {
+let currentTheme: BoardTheme = BOARDS[0];
+
+/** The static board, cached at the canvas' pixel size and theme. */
+export function drawBoard(ctx: CanvasRenderingContext2D, theme: BoardTheme = BOARDS[0]) {
   const px = ctx.canvas.width;
-  if (!boardCache || boardCache.px !== px) boardCache = { px, canvas: paintBoard(px) };
+  currentTheme = theme;
+  if (!boardCache || boardCache.px !== px || boardCache.theme !== theme.id) {
+    boardCache = { px, theme: theme.id, canvas: paintBoard(px, theme) };
+  }
   ctx.drawImage(boardCache.canvas, 0, 0, SIZE, SIZE);
 }
 
@@ -350,12 +388,21 @@ export function drawStriker(
   active: boolean,
   pull = 0,
   dir: Vec = { x: 0, y: -1 },
+  tier = 0,
 ) {
   const face = strikerSprite(skin, spritePx(ctx, d.r));
   const x = d.x - dir.x * pull * 16;
   const y = d.y - dir.y * pull * 16;
   const sp = Math.hypot(d.vx, d.vy);
-  if (sp > 900 && !reduced()) {
+  const tierColor = skin.glow ?? "rgba(255,170,60,1)";
+  // upgrade tiers: 2+ → a soft aura that breathes
+  if (tier >= 2) {
+    const breathe = 0.75 + 0.25 * Math.sin(performance.now() / 420);
+    ctx.globalAlpha = 0.55 * breathe;
+    ctx.drawImage(glowSprite(tierColor), x - d.r * 2.3, y - d.r * 2.3, d.r * 4.6, d.r * 4.6);
+    ctx.globalAlpha = 1;
+  }
+  if (sp > 900 && !reduced() && tier < 3) {
     ctx.globalAlpha = 0.14;
     for (const k of [0.024, 0.013]) ctx.drawImage(face, d.x - d.vx * k - d.r, d.y - d.vy * k - d.r, d.r * 2, d.r * 2);
     ctx.globalAlpha = 1;
@@ -373,6 +420,20 @@ export function drawStriker(
     ctx.restore();
   }
   blitDisc(ctx, face, x, y, d.r, d.a, 1, active ? 0.4 : 0);
+  // tier 1+: an engraved metal outer band
+  if (tier >= 1) {
+    ctx.save();
+    ctx.lineWidth = 2.2;
+    const band = ctx.createLinearGradient(x - d.r, y - d.r, x + d.r, y + d.r);
+    band.addColorStop(0, "rgba(255,245,220,0.95)");
+    band.addColorStop(0.5, tier >= 3 ? tierColor : "rgba(190,150,70,0.95)");
+    band.addColorStop(1, "rgba(90,60,20,0.95)");
+    ctx.strokeStyle = band;
+    ctx.beginPath();
+    ctx.arc(x, y, d.r - 1.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 export function drawAim(ctx: CanvasRenderingContext2D, s: Vec, dir: Vec, power: number, color: string) {
@@ -411,6 +472,113 @@ export function drawAim(ctx: CanvasRenderingContext2D, s: Vec, dir: Vec, power: 
   ctx.restore();
 }
 
+/** Where a disc of radius `r` leaving `from` along `dir` first touches another disc or a wall. */
+function castStriker(world: World, from: Vec, dir: Vec, r: number, maxLen: number, skip?: Disc) {
+  let bestT = maxLen;
+  let hit: Disc | null = null;
+  for (const o of world.discs) {
+    if (!o.alive || o === skip || o.kind === "striker") continue;
+    const R = o.r + r;
+    const fx = from.x - o.x;
+    const fy = from.y - o.y;
+    const b = fx * dir.x + fy * dir.y;
+    const c = fx * fx + fy * fy - R * R;
+    const disc = b * b - c;
+    if (disc < 0) continue;
+    const t = -b - Math.sqrt(disc);
+    if (t > 0.5 && t < bestT) {
+      bestT = t;
+      hit = o;
+    }
+  }
+  // walls (centre stays r inside the playfield)
+  let wall: "x" | "y" | null = null;
+  const lim = (v: number, d: number, lo: number, hi: number) => (d > 0 ? (hi - v) / d : d < 0 ? (lo - v) / d : Infinity);
+  const tx = lim(from.x, dir.x, PF_MIN + r, PF_MAX - r);
+  const ty = lim(from.y, dir.y, PF_MIN + r, PF_MAX - r);
+  if (tx < bestT && tx > 0) {
+    bestT = tx;
+    hit = null;
+    wall = "x";
+  }
+  if (ty < bestT && ty > 0) {
+    bestT = ty;
+    hit = null;
+    wall = "y";
+  }
+  return { t: bestT, hit, wall, at: { x: from.x + dir.x * bestT, y: from.y + dir.y * bestT } };
+}
+
+function dashed(ctx: CanvasRenderingContext2D, a: Vec, b: Vec, color: string, width: number, fadeTo = 0.05) {
+  const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+  grad.addColorStop(0, color);
+  grad.addColorStop(1, color.replace(/[\d.]+\)$/, `${fadeTo})`));
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = width;
+  ctx.setLineDash([14, 12]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/**
+ * Aim guide shaped by the striker's Aim stat:
+ *  - every level: a guide line (longer with more Aim) to the first thing the striker touches
+ *  - Aim 4+: the struck coin's path
+ *  - Aim 7+: the striker's own path after contact, or its bounce off a wall
+ */
+export function drawAimPreview(ctx: CanvasRenderingContext2D, world: World, dir: Vec, power: number, aim: number, valid: boolean) {
+  const s = world.striker;
+  const color = valid ? "rgba(31,92,180,0.85)" : "rgba(200,40,30,0.85)";
+  const reach = (130 + power * 560) * aimReachFor(aim);
+  const start = { x: s.x + dir.x * (STRIKER_R + 6), y: s.y + dir.y * (STRIKER_R + 6) };
+  const cast = castStriker(world, s, dir, s.r, reach);
+  ctx.save();
+  dashed(ctx, start, cast.at, color, 3.5, cast.hit || cast.wall ? 0.6 : 0.05);
+
+  if (valid && (cast.hit || cast.wall) && cast.t < reach) {
+    // ghost striker at contact
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cast.at.x, cast.at.y, STRIKER_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    if (cast.hit && aim >= AIM_TARGET_LINE) {
+      const o = cast.hit;
+      const n = { x: (o.x - cast.at.x) / (o.r + s.r), y: (o.y - cast.at.y) / (o.r + s.r) };
+      const cut = Math.max(0, dir.x * n.x + dir.y * n.y);
+      const len = 70 + 260 * cut * (0.6 + power * 0.6) * (aim >= AIM_FULL_PREVIEW ? 1.25 : 1);
+      dashed(ctx, o, { x: o.x + n.x * len, y: o.y + n.y * len }, "rgba(240,140,30,0.9)", 3);
+      if (aim >= AIM_FULL_PREVIEW && cut < 0.985) {
+        const tg = { x: dir.x - n.x * cut, y: dir.y - n.y * cut };
+        const tl = Math.hypot(tg.x, tg.y) || 1;
+        const sl = 60 + 220 * (1 - cut) * (0.6 + power * 0.6);
+        dashed(ctx, cast.at, { x: cast.at.x + (tg.x / tl) * sl, y: cast.at.y + (tg.y / tl) * sl }, "rgba(31,92,180,0.6)", 2.2);
+      }
+    } else if (cast.wall && aim >= AIM_FULL_PREVIEW) {
+      const rd = cast.wall === "x" ? { x: -dir.x, y: dir.y } : { x: dir.x, y: -dir.y };
+      const left = Math.max(60, (reach - cast.t) * 0.7);
+      const second = castStriker(world, cast.at, rd, s.r, left);
+      dashed(ctx, cast.at, second.at, color, 3);
+    }
+  }
+
+  // power arc: green → amber → red
+  const hue = 120 - power * 120;
+  ctx.strokeStyle = `hsl(${hue} 85% 48%)`;
+  ctx.lineWidth = 6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, STRIKER_R + 14, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Brass rim + inner lip of a pocket, redrawn over a dropping disc so it slips UNDER the rim. */
 function drawPocketRim(ctx: CanvasRenderingContext2D, p: Vec) {
   ctx.save();
@@ -420,9 +588,9 @@ function drawPocketRim(ctx: CanvasRenderingContext2D, p: Vec) {
   ctx.arc(p.x, p.y, POCKET_R - 2, 0, Math.PI * 2);
   ctx.stroke();
   const brass = ctx.createLinearGradient(p.x - POCKET_R, p.y - POCKET_R, p.x + POCKET_R, p.y + POCKET_R);
-  brass.addColorStop(0, "#f7d98a");
-  brass.addColorStop(0.5, "#a77a26");
-  brass.addColorStop(1, "#5c3f0c");
+  brass.addColorStop(0, currentTheme.brass[0]);
+  brass.addColorStop(0.5, currentTheme.brass[1]);
+  brass.addColorStop(1, currentTheme.brass[2]);
   ctx.strokeStyle = brass;
   ctx.lineWidth = 5;
   ctx.beginPath();
@@ -545,6 +713,15 @@ export class CarromFx {
   private next = 0;
   private shake = 0;
   private flashes: { x: number; y: number; t: number; color: string }[] = [];
+  /** mass of the striker in play (heavier strikers sound deeper) */
+  strikerMass = 1.7;
+  /** shock rings from hard impacts */
+  private ripples: { x: number; y: number; t: number; s: number }[] = [];
+  /** striker trail (tier 3 strikers: a glowing ribbon) */
+  private trail: { x: number; y: number; t: number }[] = [];
+  private trailColor = "rgba(255,170,60,1)";
+  /** slow motion: time scale for the physics, eases back to 1 */
+  private slowLeft = 0;
   /** "+1" / "Queen!" / "Foul!" labels that rise out of a pocket */
   private floaters: { x: number; y: number; vx: number; vy: number; t: number; text: string; fill: string; edge: string }[] = [];
 
@@ -563,6 +740,28 @@ export class CarromFx {
     if (!reduced()) this.shake = Math.max(this.shake, a);
   }
 
+  /** Dramatic moment (queen / last coin): run the physics slower for a beat. */
+  slowMo(seconds = 0.9) {
+    if (!reduced()) this.slowLeft = Math.max(this.slowLeft, seconds);
+  }
+
+  /** Physics time scale for this frame (1 = normal). */
+  timeScale(dt: number) {
+    if (this.slowLeft <= 0) return 1;
+    this.slowLeft -= dt;
+    // ease in and out of 35% speed
+    const k = Math.min(1, Math.max(0, this.slowLeft) / 0.25);
+    return 1 - 0.65 * k;
+  }
+
+  /** Record the striker's path while it moves fast (only drawn for top-tier strikers). */
+  trackStriker(d: Disc, tier: number, color?: string) {
+    if (tier < 3 || reduced()) return;
+    if (color) this.trailColor = color;
+    if (Math.hypot(d.vx, d.vy) > 260) this.trail.push({ x: d.x, y: d.y, t: 0 });
+    if (this.trail.length > 40) this.trail.shift();
+  }
+
   /** Strike animation: dust kicked up behind the striker + flick sound. */
   strike(x: number, y: number, dir: Vec, power: number) {
     carromAudio.flick(power, x);
@@ -574,7 +773,8 @@ export class CarromFx {
   consume(events: FxEvent[]) {
     for (const e of events) {
       if (e.type === "hit") {
-        carromAudio.hit(e.s, e.striker, e.x);
+        carromAudio.hit(e.s, e.striker, e.x, this.strikerMass);
+        if (e.s > 900 && !reduced()) this.ripples.push({ x: e.x, y: e.y, t: 0, s: Math.min(1, e.s / 2200) });
         if (e.s > 260) this.emit(e.x, e.y, Math.min(10, 2 + Math.round(e.s / 250)), 40 + e.s * 0.08, 5, "rgba(255,252,240,0.85)", 0.4);
         if (e.s > 1500) this.kickShake(Math.min(7, e.s / 400));
       } else if (e.type === "wall") {
@@ -623,7 +823,40 @@ export class CarromFx {
     this.shake *= Math.pow(0.0015, dt);
   }
 
+  /** Trail under the discs (call before drawing the striker). */
+  drawUnder(ctx: CanvasRenderingContext2D, dt: number) {
+    for (const p of this.trail) p.t += dt;
+    this.trail = this.trail.filter((p) => p.t < 0.35);
+    if (this.trail.length < 2) return;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 1; i < this.trail.length; i++) {
+      const a = this.trail[i - 1];
+      const b = this.trail[i];
+      const k = 1 - b.t / 0.35;
+      ctx.strokeStyle = this.trailColor.replace(/[\d.]+\)$/, `${(0.55 * k * (i / this.trail.length)).toFixed(3)})`);
+      ctx.lineWidth = STRIKER_R * 1.4 * k * (i / this.trail.length);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   draw(ctx: CanvasRenderingContext2D, dt: number) {
+    for (const r of this.ripples) {
+      r.t += dt * 3.2;
+      const k = Math.min(1, r.t);
+      ctx.strokeStyle = `rgba(255,250,235,${(1 - k) * 0.55 * (0.5 + r.s)})`;
+      ctx.lineWidth = 3 * (1 - k) + 0.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, 8 + k * (40 + r.s * 50), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    this.ripples = this.ripples.filter((r) => r.t < 1);
+
     for (const f of this.floaters) {
       f.t += dt;
       if (f.t <= 0) continue;
