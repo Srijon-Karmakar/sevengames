@@ -100,16 +100,20 @@ export function usePersonalScores(user: User | null) {
   return { scores, bestFor, loading };
 }
 
-export function useLeaderboard(gameId: string) {
+export function useLeaderboard(gameId: string, limit = 10) {
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
 
-    if (!supabase) {
+    if (!supabase || !gameId) {
       setLeaders([]);
+      setError(supabase ? null : "Leaderboard is offline.");
       setLoading(false);
       return;
     }
@@ -119,9 +123,18 @@ export function useLeaderboard(gameId: string) {
       .select("user_id, display_name, best_score")
       .eq("game_id", gameId)
       .order("best_score", { ascending: isLowerBetter(gameId) })
-      .limit(10)
-      .then(({ data }) => {
+      .order("user_id", { ascending: true }) // stable order for ties
+      .limit(limit)
+      .then(({ data, error: err }) => {
         if (!active) return;
+        if (err) {
+          console.error("[leaderboard] load failed:", err.message);
+          setError("Couldn't load the leaderboard.");
+          setLeaders([]);
+          setLoading(false);
+          return;
+        }
+        setError(null);
         setLeaders(
           (data ?? []).map((row, index) => ({
             rank: index + 1,
@@ -137,9 +150,72 @@ export function useLeaderboard(gameId: string) {
     return () => {
       active = false;
     };
-  }, [gameId]);
+  }, [gameId, version, limit]);
 
-  return { leaders, loading };
+  return { leaders, loading, error, refresh };
+}
+
+export type OverallRow = {
+  rank: number;
+  userId: string;
+  displayName: string;
+  points: number;
+  firsts: number;
+  rounds: number;
+  games: number;
+};
+
+/** Players ranked across every game (supabase/leaderboard.sql → leaderboard_overall). */
+export function useOverallLeaderboard(limit = 25) {
+  const [rows, setRows] = useState<OverallRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    if (!supabase) {
+      setRows([]);
+      setError("Leaderboard is offline.");
+      setLoading(false);
+      return;
+    }
+    void Promise.resolve(
+      supabase
+        .from("leaderboard_overall")
+        .select("user_id, display_name, points, firsts, rounds, games")
+        .order("points", { ascending: false })
+        .order("firsts", { ascending: false })
+        .order("rounds", { ascending: false })
+        .limit(limit),
+    ).then(({ data, error: err }) => {
+      if (!active) return;
+      if (err) {
+        console.error("[leaderboard] overall failed:", err.message);
+        setError(/does not exist|Could not find/i.test(err.message) ? "Overall ranking isn't set up yet (run supabase/leaderboard.sql)." : "Couldn't load the leaderboard.");
+        setRows([]);
+      } else {
+        setError(null);
+        setRows(
+          (data ?? []).map((r, i) => ({
+            rank: i + 1,
+            userId: r.user_id as string,
+            displayName: (r.display_name as string) || "Player",
+            points: Number(r.points) || 0,
+            firsts: Number(r.firsts) || 0,
+            rounds: Number(r.rounds) || 0,
+            games: Number(r.games) || 0,
+          })),
+        );
+      }
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [limit]);
+
+  return { rows, loading, error };
 }
 
 export function useSaveScore(user: User | null) {
@@ -158,14 +234,29 @@ export function useSaveScore(user: User | null) {
         writeLocalScores(user.id, next);
       }
 
-      if (!supabase || !user) return;
+      if (!supabase || !user) return false;
 
-      await supabase.from("game_scores").insert({
+      const s = Math.max(0, Math.round(score));
+      const secs = Math.max(0, Math.round(seconds));
+      // Server function first (works regardless of table policies, adds sanity checks) …
+      const rpc = await supabase.rpc("submit_score", { p_game: gameId, p_score: s, p_seconds: secs });
+      if (!rpc.error) return rpc.data !== false;
+      // … falling back to a direct insert if supabase/leaderboard.sql hasn't been run yet.
+      if (!/Could not find the function|does not exist/i.test(rpc.error.message)) {
+        console.error("[scores] save failed:", rpc.error.message);
+        return false;
+      }
+      const { error } = await supabase.from("game_scores").insert({
         user_id: user.id,
         game_id: gameId,
-        score,
-        seconds,
+        score: s,
+        seconds: secs,
       });
+      if (error) {
+        console.error("[scores] save failed:", error.message);
+        return false;
+      }
+      return true;
     },
     [user],
   );

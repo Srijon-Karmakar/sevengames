@@ -8,6 +8,9 @@ import {
 } from "./ReIcons";
 import { useAvatar } from "../lib/avatar";
 import AvatarLibrary from "./AvatarLibrary";
+import TokenIcon from "./TokenIcon";
+import { useTokens } from "../lib/tokens";
+import { formatTokens } from "../lib/currency";
 
 export default function DynamicAvatar({
   user,
@@ -75,8 +78,10 @@ export default function DynamicAvatar({
 
           <div className="popover-stats-grid">
             <div className="popover-stat-box">
-              <span className="stat-label">Coins</span>
-              <strong className="stat-val">🪙 3,450</strong>
+              <span className="stat-label">Tokens</span>
+              <strong className="stat-val">
+                <TokenIcon size={15} /> <TokenBalance />
+              </strong>
             </div>
             <div className="popover-stat-box">
               <span className="stat-label">Rank</span>
@@ -144,3 +149,8 @@ export default function DynamicAvatar({
   );
 }
 
+/** The signed-in player's token balance (∞ for unlimited accounts). */
+function TokenBalance() {
+  const { wallet } = useTokens();
+  return <>{wallet ? (wallet.unlimited ? "∞" : formatTokens(wallet.balance)) : "…"}</>;
+}

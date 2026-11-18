@@ -696,3 +696,244 @@
   font-family: var(--h3-mono, ui-monospace, monospace);
   letter-spacing: 0.06em;
 }
+
+/* ============================================================
+   Premium start bar: over the bottom of the game screen, the game preview stays visible
+   ============================================================ */
+.token-icon {
+  flex: none;
+  display: inline-block;
+  vertical-align: -0.18em;
+  /* a thin dark edge keeps the lime bolt readable on light surfaces too */
+  filter: drop-shadow(0 0.5px 0.5px rgba(0, 0, 0, 0.45)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+/* room for the bar under the preview */
+.gp-preview,
+.carrom-preview {
+  padding-bottom: 92px !important;
+}
+
+.gp-preview {
+  width: 100%;
+}
+
+.gp-preview-poster {
+  display: grid;
+  place-items: center;
+  min-height: 340px;
+  filter: saturate(0.9);
+}
+
+.tk-gatebar {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 40px 16px 18px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(8, 8, 12, 0.55) 45%, rgba(8, 8, 12, 0.8));
+  animation: tk-bar-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.tk-gatebar.is-again {
+  animation-delay: 0.1s;
+}
+
+.tk-gatebar > * {
+  pointer-events: auto;
+}
+
+@keyframes tk-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+.tk-gatebar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  color: #f4f4f7;
+  background: rgba(22, 23, 29, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.tk-balance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px 0 10px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tk-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 7px 0 20px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-decoration: none;
+  color: #1f0c00;
+  background: linear-gradient(145deg, #ffa55e, #f26a0c);
+  box-shadow: 0 10px 24px -10px rgba(244, 96, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.2s ease, box-shadow 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .tk-start:hover:not(:disabled) {
+    transform: translateY(-2px);
+    filter: brightness(1.05);
+    box-shadow: 0 14px 30px -10px rgba(244, 96, 0, 1), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+}
+
+.tk-start:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.tk-start:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tk-start:focus-visible,
+.tk-mini:focus-visible {
+  outline: 2px solid #ffb05c;
+  outline-offset: 3px;
+}
+
+/* cost inside the button: a little pill with the token icon */
+.tk-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 11px 0 7px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: rgba(60, 20, 0, 0.32);
+}
+
+.tk-short {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffb08a;
+}
+
+.tk-gatebar-earn {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tk-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+  color: #f4f4f7;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.tk-mini:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.tk-mini:active {
+  transform: scale(0.95);
+}
+
+.tk-gatebar-error,
+.tk-gatebar-note {
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(10, 10, 14, 0.6);
+}
+
+.tk-gatebar-error {
+  color: #ffb08a;
+}
+
+.tk-gatebar-note a {
+  color: #ffb05c;
+  font-weight: 700;
+}
+
+/* game page chip: "⬤ 1 / play" */
+.gp-chip-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+@media (max-width: 480px) {
+  .tk-gatebar {
+    padding: 32px 10px 12px;
+  }
+
+  .tk-start {
+    height: 42px;
+    padding-left: 16px;
+    font-size: 14.5px;
+  }
+
+  .tk-balance-chip,
+  .tk-mini {
+    height: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-gatebar {
+    animation: none;
+  }
+}
+
+/* ad reward: the token icon itself is the coin */
+.tk-reward-coin {
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+  filter: drop-shadow(0 0 22px rgba(158, 255, 0, 0.6));
+}

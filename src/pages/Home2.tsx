@@ -472,7 +472,7 @@ export default function Home2() {
             Categories
             <i className="ml-chev" />
           </a>
-          <Link to="/profile">
+          <Link to="/leaderboards">
             Leaderboards
             <i className="ml-chev" />
           </Link>
@@ -508,7 +508,7 @@ export default function Home2() {
           );
         })}
         <span className="ml-rail-sep" aria-hidden="true" />
-        <Link to="/profile" className="ml-rail-item" data-label="Leaderboards">
+        <Link to="/leaderboards" className="ml-rail-item" data-label="Leaderboards">
           <Trophy size={18} />
         </Link>
       </aside>

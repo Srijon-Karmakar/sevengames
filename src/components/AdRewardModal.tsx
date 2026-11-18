@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Coins, X } from "lucide-react";
+import { X } from "lucide-react";
+import TokenIcon from "./TokenIcon";
 import { useLiveAds, type Ad } from "../lib/ads";
 import { trackAd } from "../lib/track";
 import { tokenErrorText, useTokens } from "../lib/tokens";
@@ -224,7 +225,7 @@ export default function AdRewardModal({ open, onClose }: { open: boolean; onClos
                 <i style={{ width: `${((HOUSE_SECONDS - stage.left) / HOUSE_SECONDS) * 100}%` }} />
               </div>
               <button type="button" className="tk-btn tk-btn-primary" disabled={stage.left > 0} onClick={() => void claim()}>
-                <Coins size={16} />
+                <TokenIcon size={18} />
                 {stage.left > 0 ? `Claim in ${stage.left}s` : `Claim ${wallet?.ad_reward ?? 50} tokens`}
               </button>
             </div>
@@ -234,7 +235,7 @@ export default function AdRewardModal({ open, onClose }: { open: boolean; onClos
         {stage.kind === "done" ? (
           <div className="tk-modal-center">
             <span className="tk-reward-coin" aria-hidden="true">
-              <Coins size={30} />
+              <TokenIcon size={66} />
             </span>
             <h3>+{stage.reward} tokens</h3>
             <p>

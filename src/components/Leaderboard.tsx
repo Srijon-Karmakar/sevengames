@@ -1,18 +1,24 @@
-import { Trophy } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Trophy } from "lucide-react";
 import type { LeaderRow } from "../lib/scores";
 
 export default function Leaderboard({
   leaders,
   loading,
+  error,
   scoreLabel,
   userId,
   personalBest,
+  gameId,
 }: {
   leaders: LeaderRow[];
   loading: boolean;
+  error?: string | null;
   scoreLabel: string;
   userId: string | undefined;
   personalBest: number | null;
+  /** links to the full page for this game */
+  gameId?: string;
 }) {
   return (
     <aside className="leaderboard">
@@ -23,6 +29,8 @@ export default function Leaderboard({
 
       {loading ? (
         <p className="leaderboard-empty">Loading…</p>
+      ) : error ? (
+        <p className="leaderboard-empty">{error}</p>
       ) : leaders.length === 0 ? (
         <p className="leaderboard-empty">No scores yet — be the first on the board.</p>
       ) : (
@@ -44,6 +52,9 @@ export default function Leaderboard({
         <p className="leaderboard-personal">Your best: {personalBest}</p>
       ) : null}
       {!userId ? <p className="leaderboard-personal">Sign in to compete globally.</p> : null}
+      <Link className="leaderboard-more" to={gameId ? `/leaderboards?game=${gameId}` : "/leaderboards"}>
+        Full leaderboard <ArrowRight size={14} aria-hidden="true" />
+      </Link>
     </aside>
   );
 }

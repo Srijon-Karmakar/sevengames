@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   CalendarClock,
   Check,
-  Coins,
   Crown,
   Gift,
   Gamepad2,
@@ -13,7 +12,9 @@ import {
   Tv,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
+import TokenIcon from "../components/TokenIcon";
 import { useAuthContext } from "../context/AuthContext";
 import { tokenErrorText, usePlanPrices, useTokenPacks, useTokens, type LedgerRow, type TokenPack } from "../lib/tokens";
 import { formatMoney, formatTokens, pickCurrency } from "../lib/currency";
@@ -23,7 +24,7 @@ import "./tokens.css";
 import "./account.css";
 import "./tokens-page.css";
 
-const REASON: Record<string, { label: string; Icon: typeof Coins }> = {
+const REASON: Record<string, { label: string; Icon: LucideIcon }> = {
   signup: { label: "Welcome bonus", Icon: Gift },
   play: { label: "Played", Icon: Gamepad2 },
   ad: { label: "Watched an ad", Icon: Tv },
@@ -155,8 +156,8 @@ export default function TokensPage() {
       <div className="acct tw">
         <section className="ac-card ac-coin-card tw-hero">
           <div className="tw-hero-main">
-            <span className="ac-coin tw-hero-coin" aria-hidden="true">
-              <Coins size={30} />
+            <span className="tw-hero-coin" aria-hidden="true">
+              <TokenIcon size="100%" />
             </span>
             <div>
               <span className="tw-hero-label">Guest tokens</span>
@@ -182,8 +183,8 @@ export default function TokensPage() {
       {/* ---------- balance ---------- */}
       <section className="ac-card ac-coin-card tw-hero">
         <div className="tw-hero-main">
-          <span className="ac-coin tw-hero-coin" aria-hidden="true">
-            <Coins size={30} />
+          <span className="tw-hero-coin" aria-hidden="true">
+            <TokenIcon size="100%" />
           </span>
           <div>
             <span className="tw-hero-label">Your balance</span>

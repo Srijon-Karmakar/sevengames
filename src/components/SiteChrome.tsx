@@ -20,7 +20,8 @@ const usedCategories = categories.filter((c) => c === "All" || games.some((g) =>
 export default function SiteChrome({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   // Light/dark mode: game pages plus the account pages (profile, tokens); other pages keep the dark frame.
-  const isGame = pathname.startsWith("/game/") || pathname === "/profile" || pathname === "/tokens";
+  const isGame =
+    pathname.startsWith("/game/") || pathname === "/profile" || pathname === "/tokens" || pathname === "/leaderboards";
   const { theme, toggle } = useGameTheme();
 
   return (
@@ -45,7 +46,7 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
               Categories
               <i className="h3-chev" />
             </Link>
-            <Link to="/profile">
+            <Link to="/leaderboards">
               Leaderboards
               <i className="h3-chev" />
             </Link>
@@ -94,8 +95,8 @@ export default function SiteChrome({ children }: { children: ReactNode }) {
           })}
           <span className="h3-rail-sep" aria-hidden="true" />
           <Link
-            to="/profile"
-            className={`h3-rail-item${pathname === "/profile" ? " active" : ""}`}
+            to="/leaderboards"
+            className={`h3-rail-item${pathname === "/leaderboards" ? " active" : ""}`}
             data-label="Leaderboards"
           >
             <Trophy size={18} />

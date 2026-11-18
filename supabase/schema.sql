@@ -12,16 +12,19 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Public read access to profiles" on public.profiles;
 create policy "Public read access to profiles"
 on public.profiles for select
 to anon, authenticated
 using (true);
 
+drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile"
 on public.profiles for insert
 to authenticated
 with check (auth.uid() = id);
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
 on public.profiles for update
 to authenticated
@@ -127,3 +130,6 @@ grant select on public.leaderboard_fastest to anon, authenticated;
 -- 4) Optional: run once to fix profiles for users who signed up
 --    with Google before the trigger above existed:
 --    (already handled by the backfill insert in section 1)
+
+-- 5) Make the API see the new tables/views right away
+notify pgrst, 'reload schema';

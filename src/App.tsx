@@ -9,6 +9,7 @@ import AuthCallback from "./pages/AuthCallback";
 import Privacy from "./pages/Privacy";
 import Admin from "./pages/admin/Admin";
 import TokensPage from "./pages/TokensPage";
+import Leaderboards from "./pages/Leaderboards";
 import { TokensProvider } from "./lib/tokens";
 
 import { trackPageview } from "./lib/track";
@@ -49,6 +50,7 @@ function Shell() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/tokens" element={<TokensPage />} />
+        <Route path="/leaderboards" element={<Leaderboards />} />
         {/* The old home page is retired; old links land on the new one */}
         <Route path="/classic" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

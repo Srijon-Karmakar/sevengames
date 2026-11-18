@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, Coins, Gamepad2, History, LogOut, Pencil, Trophy } from "lucide-react";
+import { ArrowRight, Gamepad2, History, LogOut, Pencil, Trophy } from "lucide-react";
+import TokenIcon from "../components/TokenIcon";
 import { useAuthContext } from "../context/AuthContext";
 import { useAvatar } from "../lib/avatar";
 import AvatarLibrary from "../components/AvatarLibrary";
@@ -104,9 +105,7 @@ export default function Profile() {
       <div className="pf-overview">
         <section className="ac-card ac-coin-card pf-wallet" aria-label="Token wallet">
           <div className="pf-wallet-top">
-            <span className="ac-coin" aria-hidden="true">
-              <Coins size={24} />
-            </span>
+            <TokenIcon size={52} className="ac-token" />
             <div>
               <span className="pf-wallet-label">Token balance</span>
               <strong className="pf-wallet-num">

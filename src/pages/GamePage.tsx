@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ChevronLeft, ExternalLink, Info, Maximize, Minimize, MonitorPlay } from "lucide-react";
 import { GamePoster } from "../components/GamePoster";
 import { getGame, scoreLabel } from "../catalog";
-import { engines } from "../games";
+import { engines, previews } from "../games";
 import { useAuthContext } from "../context/AuthContext";
 import { useLeaderboard, useSaveScore } from "../lib/scores";
 import { useBestForGame } from "../hooks/useBest";
@@ -13,9 +13,28 @@ import { pushRecent } from "../lib/recent";
 import { useGameCost, useTokens } from "../lib/tokens";
 import { formatTokens } from "../lib/currency";
 import PlayGate from "../components/PlayGate";
+import TokenIcon from "../components/TokenIcon";
 import "./game-page.css";
 import "../games/game-skin.css";
 import "./game-neu.css";
+
+/** The game as it looks before you start: a custom preview, or its own start screen made inert. */
+function GatePreview({ game }: { game: NonNullable<ReturnType<typeof getGame>> }) {
+  if (game.kind !== "builtin") {
+    return (
+      <div className="gp-preview gp-preview-poster" aria-hidden="true">
+        <GamePoster game={game} size="hero" />
+      </div>
+    );
+  }
+  const Preview = previews[game.engine as keyof typeof previews];
+  if (Preview) return <Preview />;
+  return (
+    <div className="gp-preview" inert>
+      <GameRunner gameId={game.engine} onScore={() => {}} />
+    </div>
+  );
+}
 
 function GameRunner({ gameId, onScore }: { gameId: string; onScore: (score: number) => void }) {
   const Engine = engines[gameId as keyof typeof engines];
@@ -30,7 +49,7 @@ export default function GamePage() {
   const user = auth.user;
   const saveScore = useSaveScore(user);
   const best = useBestForGame(id ?? "");
-  const { leaders, loading } = useLeaderboard(id ?? "");
+  const { leaders, loading, error: leaderError, refresh: refreshLeaders } = useLeaderboard(game?.id ?? "");
   const stageRef = useRef<HTMLElement>(null);
   // Tokens: premium games (cost > 0) are paid per play. `paidPlay` counts paid plays (it also
   // remounts the game fresh for each one); `locked` puts the gate back up after a finished match.
@@ -143,10 +162,11 @@ export default function GamePage() {
           window.clearTimeout(lockTimer.current);
           lockTimer.current = window.setTimeout(() => setLocked(true), 1800);
         }
-        await saveScore(game.id, score, 0);
+        // a saved score can change the board — reload it so the new result shows up
+        if (await saveScore(game.id, score, 0)) refreshLeaders();
       }
     },
-    [game, saveScore],
+    [game, saveScore, refreshLeaders],
   );
 
   return (
@@ -166,7 +186,15 @@ export default function GamePage() {
             <li>~{game.minutes} min</li>
             {cost !== null ? (
               <li className={premium ? "gp-chip-cost" : "gp-chip-free"}>
-                {premium ? `${formatTokens(cost)} tokens / play` : (cost ?? 0) > 0 ? "Unlimited" : "Free"}
+                {premium ? (
+                  <>
+                    <TokenIcon size={14} title="tokens" /> {formatTokens(cost)} / play
+                  </>
+                ) : (cost ?? 0) > 0 ? (
+                  "Unlimited"
+                ) : (
+                  "Free"
+                )}
               </li>
             ) : null}
             {best !== null ? <li className="gp-chip-best">Best: {best}</li> : null}
@@ -214,7 +242,10 @@ export default function GamePage() {
             {cost === null ? (
               <p className="empty-note">Loading…</p>
             ) : premium && paidPlay === 0 ? (
-              <PlayGate gameId={game.id} gameTitle={game.title} cost={cost} again={false} onPaid={() => setPaidPlay(1)} />
+              <>
+                <GatePreview game={game} />
+                <PlayGate gameId={game.id} gameTitle={game.title} cost={cost} again={false} onPaid={() => setPaidPlay(1)} />
+              </>
             ) : (
               <>
                 {game.kind === "builtin" ? (
@@ -243,9 +274,11 @@ export default function GamePage() {
         <Leaderboard
           leaders={leaders}
           loading={loading}
+          error={leaderError}
           scoreLabel={scoreLabel(game)}
           userId={user?.id}
           personalBest={best}
+          gameId={game.id}
         />
       </div>
 

@@ -15,6 +15,7 @@ import ColorMatch from "./color-match";
 import SlidingPuzzle from "./sliding-puzzle";
 import SnakeGame from "./snake";
 import CarromGame from "./carrom/index";
+import CarromPreview from "./carrom/Preview";
 import StackGame from "./stack";
 import DodgeGame from "./dodge";
 import ConnectFour from "./connect-four";
@@ -48,6 +49,11 @@ export const engines: Record<GameEngine, (props: GameProps) => React.JSX.Element
   "connect-four": ConnectFour,
   "lights-out": LightsOut,
   arrows: ArrowsGame,
+};
+
+/** What to show behind the premium "Start game" bar (default: the game's own start screen, inert). */
+export const previews: Partial<Record<GameEngine, () => React.JSX.Element>> = {
+  carrom: CarromPreview,
 };
 
 export function shuffle<T>(items: T[]): T[] {

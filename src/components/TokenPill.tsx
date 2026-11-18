@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Coins } from "lucide-react";
 import { useAuthContext } from "../context/AuthContext";
 import { useTokens } from "../lib/tokens";
 import { formatTokens } from "../lib/currency";
+import TokenIcon from "./TokenIcon";
 import "../pages/tokens.css";
 
 const reducedMotion = () =>
@@ -83,7 +83,7 @@ export default function TokenPill({ variant = "default" }: { variant?: "default"
       title={user ? "Get more tokens" : "Guest tokens: sign in for 1,000 free"}
     >
       <span className="tk-pill-coin" aria-hidden="true">
-        <Coins size={15} />
+        <TokenIcon size={variant === "solid" ? 22 : 18} />
       </span>
       <b>{unlimited ? "∞" : shown !== null ? formatTokens(shown) : "…"}</b>
       {change ? (

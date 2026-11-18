@@ -282,7 +282,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
                 Categories
                 <i className="h3-chev" />
               </a>
-              <Link to="/profile">
+              <Link to="/leaderboards">
                 Leaderboards
                 <i className="h3-chev" />
               </Link>
@@ -324,7 +324,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
             );
           })}
           <span className="h3-rail-sep" aria-hidden="true" />
-          <Link to="/profile" className="h3-rail-item" data-label="Leaderboards">
+          <Link to="/leaderboards" className="h3-rail-item" data-label="Leaderboards">
             <Trophy size={18} />
           </Link>
         </aside>
@@ -408,7 +408,7 @@ export default function Home3({ videoHero = false }: { videoHero?: boolean }) {
           </ul>
           <nav className="h3-studio-links" aria-label="Footer">
             {videoHero ? <Link to="/games">All games</Link> : <a href="#h3-library">Games</a>}
-            <Link to="/profile">Leaderboards</Link>
+            <Link to="/leaderboards">Leaderboards</Link>
             <Link to="/login">Sign in</Link>
             <Link to="/privacy">Privacy policy</Link>
           </nav>

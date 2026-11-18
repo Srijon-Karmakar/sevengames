@@ -20,6 +20,7 @@ import {
 import { MAX_LEVEL, carromErrorText, xpForLevel, type useCarromProgress } from "./progress";
 import { STATS, STAT_MAX, tierOf, upgradeCost, upgradeGate, type StatKey } from "./stats";
 import { carromAudio } from "./audio";
+import TokenIcon from "../../components/TokenIcon";
 
 type Prog = ReturnType<typeof useCarromProgress>;
 
@@ -106,7 +107,7 @@ function SpendButton({
   className = "primary-btn",
 }: {
   cost: number;
-  label: string;
+  label: React.ReactNode;
   disabled?: boolean;
   onConfirm: () => void;
   className?: string;
@@ -129,7 +130,13 @@ function SpendButton({
         } else setArmed(true);
       }}
     >
-      {armed ? `Confirm · ${formatTokens(cost)} tokens` : label}
+      {armed ? (
+        <>
+          Confirm · <TokenIcon size={16} /> {formatTokens(cost)}
+        </>
+      ) : (
+        label
+      )}
     </button>
   );
 }
@@ -178,7 +185,13 @@ export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; s
     ) : st.kind === "level" ? (
       <span className="carrom-item-tag lock">🔒 Lv {st.need}</span>
     ) : (
-      <span className={`carrom-item-tag price${shop.pro ? " pro" : ""}`}>🪙 {formatTokens(shop.price)}</span>
+      <span className={`carrom-item-tag price${shop.pro ? " pro" : ""}`}>{free ? (
+          "Free for you"
+        ) : (
+          <>
+            <TokenIcon size={12} /> {formatTokens(shop.price)}
+          </>
+        )}</span>
     );
 
   const mainButton = (kind: ShopKind, id: string, name: string, shop: Shop, equipped: boolean) => {
@@ -200,7 +213,21 @@ export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; s
     return (
       <SpendButton
         cost={st.price}
-        label={st.afford ? `Buy · ${formatTokens(st.price)} tokens` : `Need ${formatTokens(st.price - balance)} more tokens`}
+        label={
+          free
+            ? "Unlock · free (unlimited)"
+            : st.afford
+              ? (
+                  <>
+                    Buy · <TokenIcon size={16} /> {formatTokens(st.price)}
+                  </>
+                )
+              : (
+                  <>
+                    Need <TokenIcon size={16} /> {formatTokens(st.price - balance)} more
+                  </>
+                )
+        }
         disabled={busy || !st.afford}
         onConfirm={() =>
           void act(async () => {
@@ -225,7 +252,7 @@ export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; s
         <h3>Locker</h3>
         {signedIn ? (
           <Link to="/tokens" className="carrom-wallet" title="Get more tokens">
-            🪙 {wallet?.unlimited ? "∞" : formatTokens(wallet?.balance ?? 0)}
+            <TokenIcon size={16} /> {wallet?.unlimited ? "∞" : formatTokens(wallet?.balance ?? 0)}
           </Link>
         ) : null}
       </div>
@@ -297,7 +324,15 @@ export default function CarromLocker({ prog, signedIn, onBack }: { prog: Prog; s
                       <SpendButton
                         className="ghost-btn carrom-stat-up"
                         cost={cost}
-                        label={`Upgrade → ${target} · 🪙 ${formatTokens(cost)}`}
+                        label={
+                          free ? (
+                            `Upgrade → ${target} · free`
+                          ) : (
+                            <>
+                              Upgrade → {target} · <TokenIcon size={14} /> {formatTokens(cost)}
+                            </>
+                          )
+                        }
                         disabled={busy || cost > balance}
                         onConfirm={() =>
                           void act(() => prog.upgrade(focused.id, key as StatKey), `${focused.name}: ${label} is now level ${target}!`)
